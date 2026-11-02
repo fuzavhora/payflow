@@ -1,55 +1,24 @@
-# PayFlow Roadmap
-
-This roadmap reflects the current `feat/payflow-foundation` branch. A checked item means code or documentation exists; it does not imply production readiness.
+# Roadmap
 
 ## Foundation
-- [x] Public repository and architecture baseline.
-- [x] Monorepo structure and feature branch.
-- [x] Responsive dashboard with fictional sample data.
-- [x] NestJS API bootstrap and database-backed health endpoint.
-- [x] PostgreSQL schema baseline and local infrastructure.
-- [ ] Commit a reproducible pnpm lockfile.
-- [ ] Commit a reviewed baseline Prisma migration.
+- [x] Merchant-scoped API key authentication and scopes
+- [x] Customer API and local PaymentIntent records
+- [x] PaymentIntent state machine and persisted transitions
+- [x] PaymentAttempt lifecycle with unknown-outcome handling
+- [x] Transactional outbox write model
+- [x] Generic outbox dispatcher primitive (claim, lease recovery, retry, dead-letter)
+- [ ] Separate worker runtime, lease renewal, metrics and operational controls
+- [ ] Webhook destinations, endpoint authorization, encrypted signing secrets and rotation
+- [ ] Provider adapter implementation and reconciliation
 
-## Merchant and developer platform
-- [x] Merchant-scoped API key authentication foundation.
-- [x] Test/live key environment validation and route scope enforcement.
-- [x] Local test merchant and API key generator.
-- [x] Merchant-scoped customer create/list/retrieve API.
-- [x] Database-enforced tenant integrity for PaymentIntent-Customer relation.
-- [ ] Merchant dashboard authentication and role-based access.
-- [ ] API key management UI, rotation, and revocation endpoints.
-- [ ] Audit events and rate limiting.
+## Reliability and release engineering
+- [ ] Commit reproducible pnpm lockfile
+- [ ] Commit baseline Prisma migration
+- [ ] PostgreSQL integration tests for SKIP LOCKED concurrency and lease recovery
+- [ ] Load and failure testing before production claims
+- [ ] Select and approve an open-source license
 
-## Payments core
-- [x] Create, list, and retrieve PaymentIntents as local records.
-- [x] Merchant-scoped idempotency and canonical request fingerprint checks.
-- [x] Pure PaymentIntent transition policy and unit tests.
-- [x] Internal persisted transition service with merchant scoping and optimistic concurrency.
-- [x] PaymentAttempt persistence lifecycle with atomic intent/attempt updates.
-- [x] Transactional outbox write model for payment lifecycle events.
-- [x] Provider-neutral adapter contract.
-- [ ] Outbox dispatcher, retries, and webhook delivery.
-- [ ] Concrete provider adapter and provider execution wiring.
-- [ ] Customer-action flow and secure return handling.
-- [ ] Attempt retries, refunds, capture, and reconciliation.
-
-## Webhooks and billing
-- [ ] Signed webhook delivery and consumer signature verification.
-- [ ] Retry and replay tooling.
-- [ ] Products, prices, subscriptions, and invoices.
-
-## Developer experience
-- [x] Getting-started guide and local setup instructions.
-- [x] Current API reference with examples and error semantics.
-- [x] Security guide and payment-data boundaries.
-- [x] Troubleshooting guide.
-- [x] Payment lifecycle and provider integration guide.
-- [x] Transactional outbox design documentation.
-- [ ] SDKs and language-specific integration examples.
-- [ ] Local webhook inspector.
-- [ ] Self-hosting and upgrade documentation.
-
-## Production gate
-
-Do not declare production readiness until security review, provider approval, regulatory review, threat modeling, backup/restore drills, load testing, incident runbooks, and PCI scope assessment are complete. Current PaymentIntent endpoints do not execute payments.
+## Product
+- [ ] Replace dashboard sample data with authenticated API-backed views
+- [ ] Merchant onboarding and API key management UI
+- [ ] Event inspection and delivery history

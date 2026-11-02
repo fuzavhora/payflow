@@ -2,37 +2,26 @@
 
 ## Purpose
 
-Payment state changes must not depend on an in-process event emitter or a second database write after the transaction. PayFlow uses an outbox table so the state change and its event record commit or roll back together.
+PayFlow writes payment state changes and their outbox records in the same PostgreSQL transaction. Payloads contain normalized identifiers and status metadata only; raw provider payloads and cardholder data must never be copied into the outbox.
 
-## Current implementation
+## Dispatcher
 
-The Prisma schema includes `OutboxEvent` with:
-- merchant ownership;
-- event type and aggregate identity;
-- JSON payload;
-- unique merchant-scoped deduplication key;
-- pending/processing/published/dead-letter states;
-- attempt count, availability time, lock time, publication time, and last error.
+`OutboxDispatcherService.dispatchOnce(handler, options)` is a generic delivery primitive exported by the payments module. It is deliberately not started by the API process; a separately managed worker runtime must invoke it with a destination-specific handler.
 
-PaymentAttempt persistence writes outbox records in the same transaction as:
-- transition to processing and attempt creation;
-- definitive success/failure result application;
-- pending provider result;
-- unknown provider outcome after timeout.
+- Claims due PENDING rows and expired PROCESSING leases in one short transaction.
+- Uses PostgreSQL `FOR UPDATE SKIP LOCKED` so concurrent workers claim disjoint rows.
+- Increments attempts and stamps the lease before committing.
+- Performs destination/network I/O after the claim transaction commits.
+- Marks PUBLISHED only after the handler resolves successfully.
+- Applies capped exponential equal-jitter backoff on failure and DEAD_LETTER after the configured attempt limit.
+- Reclaims PROCESSING rows whose lease expired after a worker crash.
 
-Event payloads contain normalized identifiers and status metadata only. Raw provider payloads and cardholder data are not copied into the outbox.
+Defaults: batch 25, lease 60 seconds, max 8 attempts, retry base 1 second, retry cap 1 hour. Options are validated and bounded.
 
-## Delivery semantics and remaining work
+## Delivery semantics and limitations
 
-The outbox is currently a durable write model only. There is no dispatcher, lease/recovery worker, delivery retry loop, or webhook endpoint yet. Do not claim events are delivered.
+Delivery is **at least once**, not exactly once. A worker may deliver successfully and crash before marking PUBLISHED; a later worker can redeliver after lease expiry. Destination handlers must use `message.id` as their downstream idempotency key.
 
-The future dispatcher should:
-1. Claim batches with PostgreSQL row locking (prefer `FOR UPDATE SKIP LOCKED`) and a short lease.
-2. Commit the claim before network delivery.
-3. Deliver outside the transaction.
-4. Mark published only after the destination acknowledges.
-5. Retry with exponential backoff and jitter; move exhausted events to dead-letter.
-6. Recover expired PROCESSING leases after worker crashes.
-7. Use the event ID as the downstream idempotency key.
+Keep handler execution comfortably below the lease duration. Lease heartbeat/ownership tokens are not implemented; long-running handlers can outlive a lease and be delivered concurrently. The current code is a dispatcher primitive, not a worker process or scheduler.
 
-Delivery is at-least-once. Consumers must deduplicate. Never promise exactly-once delivery.
+Dead-letter events require an explicit operational replay/requeue procedure. No webhook endpoint/subscription model, signing secret storage/rotation, delivery history, metrics, alerting, or dead-letter UI exists yet. No concrete payment provider or money movement is implemented.
