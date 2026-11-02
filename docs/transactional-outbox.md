@@ -4,24 +4,29 @@
 
 PayFlow writes payment state changes and their outbox records in the same PostgreSQL transaction. Payloads contain normalized identifiers and status metadata only; raw provider payloads and cardholder data must never be copied into the outbox.
 
-## Dispatcher
+## Dispatch and webhook fanout
 
-`OutboxDispatcherService.dispatchOnce(handler, options)` is a generic delivery primitive exported by the payments module. It is deliberately not started by the API process; a separately managed worker runtime must invoke it with a destination-specific handler.
+The API process does not start background work. `WebhookDeliveryWorkerService` runs in a separate process and:
+1. Claims due outbox rows and expired leases using PostgreSQL `FOR UPDATE SKIP LOCKED`.
+2. Calls idempotent webhook fanout, which creates one durable delivery row per enabled endpoint subscribed to the event.
+3. Marks the outbox row PUBLISHED only after fanout commits.
+4. Claims endpoint delivery rows using a separate lease and lock token.
+5. Creates attempt history before network I/O, then signs and sends the exact serialized event body through the SSRF-aware HTTPS transport.
+6. Persists success, permanent failure, retry scheduling, or dead-letter state.
 
-- Claims due PENDING rows and expired PROCESSING leases in one short transaction.
-- Uses PostgreSQL `FOR UPDATE SKIP LOCKED` so concurrent workers claim disjoint rows.
-- Increments attempts and stamps the lease before committing.
-- Performs destination/network I/O after the claim transaction commits.
-- Marks PUBLISHED only after the handler resolves successfully.
-- Applies capped exponential equal-jitter backoff on failure and DEAD_LETTER after the configured attempt limit.
-- Reclaims PROCESSING rows whose lease expired after a worker crash.
+The outbox dispatcher is generic and still accepts a destination handler. The webhook worker supplies the fanout handler; future event sinks should use their own handler rather than assuming every outbox event is a webhook.
 
-Defaults: batch 25, lease 60 seconds, max 8 attempts, retry base 1 second, retry cap 1 hour. Options are validated and bounded.
+## Concurrency and recovery
+
+- Uses `FOR UPDATE SKIP LOCKED` to prevent workers claiming the same available row concurrently.
+- Claims are committed before network I/O.
+- Expired PROCESSING leases can be reclaimed after worker crashes.
+- Lock tokens fence stale workers from acknowledging or rescheduling rows they no longer own.
+- Attempt records are created transactionally with each delivery claim; incomplete attempts from expired leases are marked as lease-expired.
+- Retry uses capped exponential backoff with jitter. Permanent HTTP 3xx/4xx responses (except 408, 409, 425, 429) become FAILED; transient failures retry and eventually become DEAD_LETTER.
 
 ## Delivery semantics and limitations
 
-Delivery is **at least once**, not exactly once. A worker may deliver successfully and crash before marking PUBLISHED; a later worker can redeliver after lease expiry. Destination handlers must use `message.id` as their downstream idempotency key.
+Delivery is **at least once**, not exactly once. A worker may deliver successfully and crash before acknowledging the database row; a later worker can redeliver after lease expiry. Consumers must deduplicate using the stable outbox event ID supplied in `PayFlow-Event-Id`.
 
-Keep handler execution comfortably below the lease duration. Each claim batch receives a fresh ownership token. A stale worker cannot acknowledge or reschedule an event after another worker has reclaimed it. Lease heartbeat is not implemented; long-running handlers can still overlap after lease expiry, but only the current token owner can mutate the row. The current code is a dispatcher primitive, not a worker process or scheduler.
-
-Dead-letter events require an explicit operational replay/requeue procedure. No webhook endpoint/subscription model, signing secret storage/rotation, delivery history, metrics, alerting, or dead-letter UI exists yet. No concrete payment provider or money movement is implemented.
+The worker's default HTTPS timeout is 8 seconds and delivery lease is 60 seconds. DNS resolution and runtime pauses can still exceed expectations; leases are not heartbeated. Run with a conservative timeout and monitor worker health. No concrete payment provider, card processing, money movement, manual replay, dead-letter admin UI, metrics, or alerting is implemented.

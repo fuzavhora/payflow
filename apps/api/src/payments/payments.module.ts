@@ -11,11 +11,29 @@ import { WebhookSignatureService } from "./webhook-signature.service";
 import { WebhookDeliveryService } from "./webhook-delivery.service";
 import { WebhookDeliveriesController } from "./webhook-deliveries.controller";
 import { SecureWebhookHttpTransport } from "./secure-webhook-http-transport.service";
+import { WebhookDeliveryWorkerService } from "./webhook-delivery-worker.service";
 
 @Module({
   imports: [AuthModule],
   controllers: [PaymentIntentsController, WebhookEndpointsController, WebhookDeliveriesController],
-  providers: [PaymentIntentsService, PaymentIntentTransitionService, PaymentAttemptService, OutboxDispatcherService, WebhookEndpointsService, WebhookSignatureService, WebhookDeliveryService, SecureWebhookHttpTransport],
-  exports: [PaymentIntentTransitionService, PaymentAttemptService, OutboxDispatcherService, WebhookEndpointsService, WebhookSignatureService],
+  providers: [
+    PaymentIntentsService,
+    PaymentIntentTransitionService,
+    PaymentAttemptService,
+    OutboxDispatcherService,
+    WebhookEndpointsService,
+    WebhookSignatureService,
+    WebhookDeliveryService,
+    SecureWebhookHttpTransport,
+    WebhookDeliveryWorkerService,
+  ],
+  exports: [
+    PaymentIntentTransitionService,
+    PaymentAttemptService,
+    OutboxDispatcherService,
+    WebhookEndpointsService,
+    WebhookSignatureService,
+    WebhookDeliveryWorkerService,
+  ],
 })
 export class PaymentsModule {}
