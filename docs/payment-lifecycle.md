@@ -17,7 +17,9 @@ The domain state machine defines these allowed transitions:
 | `failed` | none (terminal) |
 | `canceled` | none (terminal) |
 
-The transition policy is implemented as a pure domain module under `apps/api/src/payments/domain` and has unit tests. It is not yet connected to a public transition endpoint or provider callback handler. This separation is intentional: callers must not be able to mark an intent successful simply by submitting a status field.
+The pure domain policy is implemented under `apps/api/src/payments/domain` and has unit tests. An internal application service now applies valid transitions using a merchant-scoped conditional update (compare-and-swap on the observed status). If another worker changes the status first, the operation returns a conflict rather than overwriting the newer state.
+
+The transition service is intentionally not exposed as a public status mutation endpoint. A merchant or browser client must not be able to mark a payment successful by submitting a status field. Future provider orchestration and verified webhook handling will be the trusted callers.
 
 ## Provider adapter contract
 
