@@ -59,7 +59,9 @@ describe("PayFlow API integration (PostgreSQL)", () => {
 
   afterAll(async () => {
     if (prisma && merchantA && merchantB) {
-      await prisma.merchant.deleteMany({ where: { id: { in: [merchantA, merchantB] } } });
+      const merchantIds = [merchantA, merchantB];
+      await prisma.paymentIntent.deleteMany({ where: { merchantId: { in: merchantIds } } });
+      await prisma.merchant.deleteMany({ where: { id: { in: merchantIds } } });
     }
     if (app) await app.close();
   });
