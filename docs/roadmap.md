@@ -6,8 +6,8 @@
 - [x] Responsive dashboard with fictional sample data.
 - [x] NestJS API bootstrap and database-backed health endpoint.
 - [x] PostgreSQL schema baseline and local infrastructure.
-- [ ] Install dependencies and run build, lint, and test verification.
-- [ ] CI workflow and license selection.
+- [x] GitHub Actions validation workflow committed; runtime result is being corrected.
+- [ ] Commit a reproducible pnpm lockfile and verify green CI.
 
 ## Merchant and developer platform
 - [x] Merchant-scoped API key authentication foundation.
@@ -20,7 +20,7 @@
 
 ## Payments core
 - [x] Create, list, and retrieve PaymentIntents in local test mode.
-- [x] Merchant-scoped idempotency and request fingerprint checks.
+- [x] Merchant-scoped idempotency and canonical request fingerprint checks.
 - [ ] Explicit, tested payment state transition service.
 - [ ] Provider adapter interface and first provider sandbox integration.
 - [ ] Refund lifecycle and reconciliation.

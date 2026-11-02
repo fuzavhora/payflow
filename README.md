@@ -1,5 +1,6 @@
 # PayFlow
 
+[![CI](https://github.com/fuzavhora/payflow/actions/workflows/ci.yml/badge.svg?branch=feat/payflow-foundation)](https://github.com/fuzavhora/payflow/actions/workflows/ci.yml)
 [![GitHub stars](https://img.shields.io/github/stars/fuzavhora/payflow?style=social)](https://github.com/fuzavhora/payflow/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/fuzavhora/payflow?style=social)](https://github.com/fuzavhora/payflow/network/members)
 [![GitHub issues](https://img.shields.io/github/issues/fuzavhora/payflow)](https://github.com/fuzavhora/payflow/issues)
@@ -14,9 +15,10 @@ An open-source, developer-first payments and billing platform.
 - Merchant-scoped API key authentication with test/live environment checks and route scopes.
 - Customer create/list/retrieve API.
 - PaymentIntent create/list/retrieve API.
-- Merchant-scoped idempotency with request fingerprint checks.
+- Merchant-scoped idempotency with canonical request fingerprint checks.
 - PostgreSQL schema for merchants, API keys, customers, payment intents, attempts, and idempotency.
 - Docker Compose for local PostgreSQL and Redis. Redis is provisioned but not yet connected to a worker.
+- GitHub Actions workflow for install, build, typecheck, and tests.
 
 ## Local development
 Requirements: Node.js 20+, pnpm 9+, Docker.
