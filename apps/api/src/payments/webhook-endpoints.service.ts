@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { createCipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateWebhookEndpointDto } from "./dto/create-webhook-endpoint.dto";
 import { UpdateWebhookEndpointDto } from "./dto/update-webhook-endpoint.dto";
@@ -46,6 +46,22 @@ export class WebhookEndpointsService {
     });
     if (result.count === 0) throw new NotFoundException("Webhook endpoint not found.");
     return { id, enabled: false };
+  }
+
+
+  async getSecretForDelivery(merchantId: string, id: string): Promise<string> {
+    const endpoint = await this.prisma.webhookEndpoint.findFirst({
+      where: { id, merchantId, enabled: true },
+      select: { secretCiphertext: true, secretIv: true, secretAuthTag: true, secretKeyVersion: true },
+    });
+    if (!endpoint) throw new NotFoundException("Enabled webhook endpoint not found.");
+    if (endpoint.secretKeyVersion !== 1) throw new Error("Unsupported webhook secret key version.");
+    const decipher = createDecipheriv("aes-256-gcm", this.encryptionKey(), Buffer.from(endpoint.secretIv, "base64"));
+    decipher.setAuthTag(Buffer.from(endpoint.secretAuthTag, "base64"));
+    return Buffer.concat([
+      decipher.update(Buffer.from(endpoint.secretCiphertext, "base64")),
+      decipher.final(),
+    ]).toString("utf8");
   }
 
   private encryptSecret(secret: string) {

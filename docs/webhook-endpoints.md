@@ -21,6 +21,10 @@ A random 256-bit secret is generated per endpoint. It is encrypted at rest using
 
 Only HTTPS URLs with public-looking hostnames are accepted; literal IP addresses, localhost and local/internal suffixes are rejected. This is only an input-validation baseline. Before enabling outbound delivery, the delivery transport must resolve DNS at connection time, reject loopback/private/link-local/reserved IPv4 and IPv6 addresses, pin the validated address for the request, and revalidate every redirect (prefer disabling redirects). Otherwise DNS rebinding or redirects can turn webhook delivery into an SSRF primitive.
 
+## Signature primitive
+
+`WebhookSignatureService` signs the exact raw HTTP body bytes using HMAC-SHA256 over `timestamp + "." + rawBody` and emits `t=<unix-seconds>,v1=<hex-digest>`. Verification uses constant-time digest comparison and a default 300-second timestamp tolerance. Consumers must verify the raw request body, reject stale timestamps, and implement event-ID deduplication. `WebhookEndpointsService.getSecretForDelivery` decrypts an enabled endpoint secret for internal server-side delivery use only; never expose it through a controller or logs.
+
 ## Not yet implemented
 
 Endpoint CRUD and secret encryption are implemented, but the outbox dispatcher is not yet connected to endpoints. HMAC request signing, timestamp/replay verification guidance, HTTP delivery, per-endpoint attempt history, timeout policy, SSRF-hardened DNS transport, secret rotation and manual replay are pending. Do not tell integrators that webhooks are being delivered yet.
