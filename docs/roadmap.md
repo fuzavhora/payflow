@@ -8,7 +8,7 @@
 - [x] Transactional outbox write model
 - [x] Generic outbox dispatcher primitive (claim, lease recovery, retry, dead-letter)
 - [ ] Separate worker runtime, lease renewal, metrics and operational controls
-- [ ] Webhook destinations, endpoint authorization, encrypted signing secrets and rotation
+- [x] Merchant-scoped webhook endpoint registration, subscription updates and encrypted signing secret storage\n- [ ] HMAC delivery/signature versioning, SSRF-hardened transport, delivery history, secret rotation and replay
 - [ ] Provider adapter implementation and reconciliation
 
 ## Reliability and release engineering

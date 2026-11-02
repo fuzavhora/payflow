@@ -1,4 +1,4 @@
-import { IsArray, IsBoolean, IsOptional, IsString, IsUrl, MaxLength } from "class-validator";
+import { ArrayMaxSize, IsArray, IsBoolean, IsOptional, IsString, IsUrl, Matches, MaxLength } from "class-validator";
 
 export class UpdateWebhookEndpointDto {
   @IsOptional()
@@ -12,7 +12,9 @@ export class UpdateWebhookEndpointDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(50)
   @IsString({ each: true })
+  @Matches(/^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$/, { each: true })
   @MaxLength(100, { each: true })
   events?: string[];
 }

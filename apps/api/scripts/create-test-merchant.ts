@@ -13,7 +13,7 @@ async function main() {
   await prisma.merchant.create({
     data: { name, slug, apiKeys: { create: {
       name: "Local development key", keyPrefix, keyHash, environment: ApiKeyEnvironment.TEST,
-      scopes: ["payment_intents:read", "payment_intents:write", "customers:read", "customers:write"],
+      scopes: ["payment_intents:read", "payment_intents:write", "customers:read", "customers:write", "webhooks:read", "webhooks:write"],
     } } },
   });
   console.log("Merchant created:", slug);
