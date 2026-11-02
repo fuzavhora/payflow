@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { OutboxEventStatus, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -10,6 +11,7 @@ export interface OutboxMessage {
   aggregateId: string;
   payload: Prisma.JsonValue;
   attempts: number;
+  lockToken: string;
 }
 export interface OutboxDispatchOptions {
   batchSize?: number; leaseSeconds?: number; maxAttempts?: number;
@@ -31,20 +33,22 @@ export class OutboxDispatcherService {
     const baseRetryDelayMs = this.integerOption(options.baseRetryDelayMs, 1000, 100, 3600000);
     const maxRetryDelayMs = this.integerOption(options.maxRetryDelayMs, 3600000, baseRetryDelayMs, 86400000);
 
+    const lockToken = randomUUID();
     const claimed = await this.prisma.$transaction(async (tx) =>
       tx.$queryRawUnsafe<OutboxMessage[]>(
-        'WITH candidates AS ( SELECT "id" FROM "OutboxEvent" WHERE ("status" = \'PENDING\'::"OutboxEventStatus" AND "availableAt" <= NOW()) OR ("status" = \'PROCESSING\'::"OutboxEventStatus" AND "lockedAt" < NOW() - ($1 * INTERVAL \'1 second\')) ORDER BY "availableAt" ASC, "createdAt" ASC FOR UPDATE SKIP LOCKED LIMIT $2 ) UPDATE "OutboxEvent" AS event SET "status" = \'PROCESSING\'::"OutboxEventStatus", "attempts" = event."attempts" + 1, "lockedAt" = NOW() FROM candidates WHERE event."id" = candidates."id" RETURNING event."id", event."merchantId", event."eventType", event."aggregateType", event."aggregateId", event."payload", event."attempts"',
-        leaseSeconds, batchSize,
+        'WITH candidates AS ( SELECT "id" FROM "OutboxEvent" WHERE ("status" = \'PENDING\'::"OutboxEventStatus" AND "availableAt" <= NOW()) OR ("status" = \'PROCESSING\'::"OutboxEventStatus" AND "lockedAt" < NOW() - ($1 * INTERVAL \'1 second\')) ORDER BY "availableAt" ASC, "createdAt" ASC FOR UPDATE SKIP LOCKED LIMIT $2 ) UPDATE "OutboxEvent" AS event SET "status" = \'PROCESSING\'::"OutboxEventStatus", "attempts" = event."attempts" + 1, "lockedAt" = NOW(), "lockToken" = $3 FROM candidates WHERE event."id" = candidates."id" RETURNING event."id", event."merchantId", event."eventType", event."aggregateType", event."aggregateId", event."payload", event."attempts", event."lockToken"',
+        leaseSeconds, batchSize, lockToken,
       ),
     );
 
     const summary: OutboxDispatchSummary = { claimed: claimed.length, published: 0, retried: 0, deadLettered: 0 };
     for (const message of claimed) {
       try {
-        await deliver(message);
+        const { lockToken: _lockToken, ...publicMessage } = message;
+        await deliver(publicMessage);
         const ack = await this.prisma.outboxEvent.updateMany({
-          where: { id: message.id, status: OutboxEventStatus.PROCESSING },
-          data: { status: OutboxEventStatus.PUBLISHED, publishedAt: new Date(), lockedAt: null, lastError: null },
+          where: { id: message.id, status: OutboxEventStatus.PROCESSING, lockToken: message.lockToken },
+          data: { status: OutboxEventStatus.PUBLISHED, publishedAt: new Date(), lockedAt: null, lockToken: null, lastError: null },
         });
         if (ack.count === 1) summary.published++;
         else this.logger.warn(`Acknowledgement lost for outbox event ${message.id}; redelivery is possible.`);
@@ -54,8 +58,8 @@ export class OutboxDispatcherService {
         const update = await this.prisma.outboxEvent.updateMany({
           where: { id: message.id, status: OutboxEventStatus.PROCESSING },
           data: deadLetter
-            ? { status: OutboxEventStatus.DEAD_LETTER, lockedAt: null, lastError: this.safeErrorMessage(error) }
-            : { status: OutboxEventStatus.PENDING, availableAt: new Date(Date.now() + delay), lockedAt: null, lastError: this.safeErrorMessage(error) },
+            ? { status: OutboxEventStatus.DEAD_LETTER, lockedAt: null, lockToken: null, lastError: this.safeErrorMessage(error) }
+            : { status: OutboxEventStatus.PENDING, availableAt: new Date(Date.now() + delay), lockedAt: null, lockToken: null, lastError: this.safeErrorMessage(error) },
         });
         if (update.count === 1) {
           if (deadLetter) summary.deadLettered++;

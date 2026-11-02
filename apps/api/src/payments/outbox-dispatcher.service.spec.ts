@@ -7,7 +7,7 @@ describe("OutboxDispatcherService", () => {
   let prisma: { $transaction: jest.Mock; outboxEvent: { updateMany: jest.Mock } };
   const event: OutboxMessage = {
     id: "evt_1", merchantId: "merchant_1", eventType: "payment_intent.succeeded",
-    aggregateType: "payment_intent", aggregateId: "pi_1", payload: { paymentIntentId: "pi_1" }, attempts: 1,
+    aggregateType: "payment_intent", aggregateId: "pi_1", payload: { paymentIntentId: "pi_1" }, attempts: 1, lockToken: "claim-token",
   };
   beforeEach(() => {
     prisma = {
@@ -19,9 +19,9 @@ describe("OutboxDispatcherService", () => {
   it("publishes after the destination acknowledges", async () => {
     const deliver = jest.fn().mockResolvedValue(undefined);
     const result = await service.dispatchOnce(deliver);
-    expect(deliver).toHaveBeenCalledWith(event);
+    expect(deliver).toHaveBeenCalledWith(expect.not.objectContaining({ lockToken: expect.any(String) }));
     expect(prisma.outboxEvent.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: event.id, status: OutboxEventStatus.PROCESSING },
+      where: { id: event.id, status: OutboxEventStatus.PROCESSING, lockToken: event.lockToken },
       data: expect.objectContaining({ status: OutboxEventStatus.PUBLISHED, publishedAt: expect.any(Date) }),
     }));
     expect(result).toEqual({ claimed: 1, published: 1, retried: 0, deadLettered: 0 });

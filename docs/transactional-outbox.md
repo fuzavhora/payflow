@@ -22,6 +22,6 @@ Defaults: batch 25, lease 60 seconds, max 8 attempts, retry base 1 second, retry
 
 Delivery is **at least once**, not exactly once. A worker may deliver successfully and crash before marking PUBLISHED; a later worker can redeliver after lease expiry. Destination handlers must use `message.id` as their downstream idempotency key.
 
-Keep handler execution comfortably below the lease duration. Lease heartbeat/ownership tokens are not implemented; long-running handlers can outlive a lease and be delivered concurrently. The current code is a dispatcher primitive, not a worker process or scheduler.
+Keep handler execution comfortably below the lease duration. Each claim batch receives a fresh ownership token. A stale worker cannot acknowledge or reschedule an event after another worker has reclaimed it. Lease heartbeat is not implemented; long-running handlers can still overlap after lease expiry, but only the current token owner can mutate the row. The current code is a dispatcher primitive, not a worker process or scheduler.
 
 Dead-letter events require an explicit operational replay/requeue procedure. No webhook endpoint/subscription model, signing secret storage/rotation, delivery history, metrics, alerting, or dead-letter UI exists yet. No concrete payment provider or money movement is implemented.
