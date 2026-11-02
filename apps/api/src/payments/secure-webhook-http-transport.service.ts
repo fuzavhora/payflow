@@ -12,20 +12,26 @@ export interface WebhookHttpResult { statusCode: number; durationMs: number; }
  */
 @Injectable()
 export class SecureWebhookHttpTransport {
-  private readonly blocked = new BlockList();
+  private readonly blockedIpv4 = new BlockList();
+  private readonly blockedIpv6 = new BlockList();
+  private readonly globalIpv6 = new BlockList();
 
   constructor() {
+    // Keep address-family policies separate: Node's BlockList can treat IPv4-mapped
+    // IPv6 ranges as overlapping IPv4 when both families share one instance.
     for (const [range, prefix] of [
       ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8],
       ["169.254.0.0", 16], ["172.16.0.0", 12], ["192.0.0.0", 24], ["192.0.2.0", 24],
       ["192.88.99.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["198.51.100.0", 24],
       ["203.0.113.0", 24], ["224.0.0.0", 4], ["240.0.0.0", 4],
-    ] as const) this.blocked.addSubnet(range, prefix, "ipv4");
+    ] as const) this.blockedIpv4.addSubnet(range, prefix, "ipv4");
+
     for (const [range, prefix] of [
       ["::", 128], ["::1", 128], ["::ffff:0:0", 96], ["64:ff9b::", 96],
       ["100::", 64], ["2001::", 23], ["2001:db8::", 32], ["2002::", 16],
       ["fc00::", 7], ["fe80::", 10], ["ff00::", 8],
-    ] as const) this.blocked.addSubnet(range, prefix, "ipv6");
+    ] as const) this.blockedIpv6.addSubnet(range, prefix, "ipv6");
+    this.globalIpv6.addSubnet("2000::", 3, "ipv6");
   }
 
   async post(urlValue: string, body: Buffer, headers: Record<string, string>, timeoutMs = 8000): Promise<WebhookHttpResult> {
@@ -51,17 +57,15 @@ export class SecureWebhookHttpTransport {
         rejectUnauthorized: true,
         lookup: (_hostname, _options, callback) => callback(null, pinned.address, pinned.family),
       }, (response) => {
-        // Consume a bounded response body; never follow redirects.
         let received = 0;
         response.on("data", (chunk: Buffer) => {
           received += chunk.length;
           if (received > 16 * 1024) req.destroy(new Error("Webhook response exceeded 16 KiB."));
         });
-        response.on("end", () => {
-          const statusCode = response.statusCode ?? 0;
-          if (statusCode >= 200 && statusCode < 300) resolve({ statusCode, durationMs: Date.now() - started });
-          else reject(new Error(`Webhook endpoint returned HTTP ${statusCode}.`));
-        });
+        response.on("end", () => resolve({
+          statusCode: response.statusCode ?? 0,
+          durationMs: Date.now() - started,
+        }));
       });
       req.on("timeout", () => req.destroy(new Error("Webhook request timed out.")));
       req.on("error", reject);
@@ -72,12 +76,10 @@ export class SecureWebhookHttpTransport {
   private isPublicAddress(address: string, family: number): boolean {
     const actualFamily = isIP(address);
     if (actualFamily !== family) return false;
-    if (family === 4) return !this.blocked.check(address, "ipv4");
+    if (family === 4) return !this.blockedIpv4.check(address, "ipv4");
     if (family === 6) {
-      // Only global-unicast 2000::/3 is accepted; all other IPv6 allocations are denied.
-      const globalUnicast = new BlockList();
-      globalUnicast.addSubnet("2000::", 3, "ipv6");
-      return globalUnicast.check(address, "ipv6") && !this.blocked.check(address, "ipv6");
+      // Only global-unicast 2000::/3 is accepted, excluding special-purpose ranges.
+      return this.globalIpv6.check(address, "ipv6") && !this.blockedIpv6.check(address, "ipv6");
     }
     return false;
   }
