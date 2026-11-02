@@ -76,6 +76,17 @@ describe("SecureWebhookHttpTransport", () => {
     expect(lookupResult).toEqual({ address: "1.1.1.1", family: 4 });
   });
 
+  it("bounds DNS resolution time before opening a socket", async () => {
+    jest.useFakeTimers();
+    lookupMock.mockImplementation(() => new Promise(() => undefined));
+    const pending = transport.post("https://hooks.example.com/events", Buffer.from("{}"), {});
+    const assertion = expect(pending).rejects.toThrow("DNS resolution timed out");
+    await jest.advanceTimersByTimeAsync(3000);
+    await assertion;
+    expect(requestMock).not.toHaveBeenCalled();
+    jest.useRealTimers();
+  });
+
   it("rejects a mixed public/private DNS answer set before opening a socket", async () => {
     lookupMock.mockResolvedValue([
       { address: "1.1.1.1", family: 4 },
