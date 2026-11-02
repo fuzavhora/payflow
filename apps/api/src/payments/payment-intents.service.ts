@@ -5,6 +5,14 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CreatePaymentIntentDto } from "./dto/create-payment-intent.dto";
 import { ListPaymentIntentsDto } from "./dto/list-payment-intents.dto";
 
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, nested]) => [key, canonicalize(nested)]));
+  }
+  return value;
+}
+
 @Injectable()
 export class PaymentIntentsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -21,25 +29,23 @@ export class PaymentIntentsService {
     if (!/^[A-Za-z0-9._:-]{8,255}$/.test(idempotencyKey)) {
       throw new UnprocessableEntityException("Idempotency-Key must be 8-255 safe characters.");
     }
-    const requestHash = createHash("sha256").update(JSON.stringify({
+    const fingerprint = canonicalize({
       amount: dto.amount, currency: dto.currency, customerId: dto.customerId ?? null,
       description: dto.description ?? null, metadata: dto.metadata ?? null,
-    })).digest("hex");
+    });
+    const requestHash = createHash("sha256").update(JSON.stringify(fingerprint)).digest("hex");
 
     try {
       const payment = await this.prisma.$transaction(async (tx) => {
         if (dto.customerId) {
-          const customer = await tx.customer.findFirst({
-            where: { id: dto.customerId, merchantId }, select: { id: true },
-          });
+          const customer = await tx.customer.findFirst({ where: { id: dto.customerId, merchantId }, select: { id: true } });
           if (!customer) throw new NotFoundException("Customer not found for this merchant.");
         }
         await tx.idempotencyRecord.create({ data: { merchantId, key: idempotencyKey, requestHash } });
         const created = await tx.paymentIntent.create({
           data: {
             merchantId, customerId: dto.customerId, amount: BigInt(dto.amount), currency: dto.currency,
-            description: dto.description,
-            metadata: dto.metadata as Prisma.InputJsonValue | undefined,
+            description: dto.description, metadata: dto.metadata as Prisma.InputJsonValue | undefined,
           },
         });
         await tx.idempotencyRecord.update({
@@ -51,13 +57,9 @@ export class PaymentIntentsService {
       return { data: this.serialize(payment), idempotentReplay: false };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        const prior = await this.prisma.idempotencyRecord.findUnique({
-          where: { merchantId_key: { merchantId, key: idempotencyKey } },
-        });
+        const prior = await this.prisma.idempotencyRecord.findUnique({ where: { merchantId_key: { merchantId, key: idempotencyKey } } });
         if (prior) {
-          if (prior.requestHash !== requestHash) {
-            throw new ConflictException("This idempotency key was already used with a different request.");
-          }
+          if (prior.requestHash !== requestHash) throw new ConflictException("This idempotency key was already used with a different request.");
           if (prior.responseBody) return { data: prior.responseBody, idempotentReplay: true };
         }
       }
