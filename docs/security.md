@@ -37,3 +37,8 @@ When a provider integration is added, prefer provider-hosted checkout, hosted fi
 - The platform is not a bank, acquirer, card network, or licensed payment processor. External licensed providers must execute payment transactions.
 
 Do not use this development build with real cardholder data or real payment traffic.
+
+
+## Webhook endpoint security
+
+Webhook signing secrets are generated with cryptographic randomness and encrypted using AES-256-GCM. Configure `PAYFLOW_WEBHOOK_ENCRYPTION_KEY` (32 bytes encoded as 64 hex characters) outside source control. The plaintext secret is returned once on endpoint creation. Endpoint APIs are merchant-scoped and require dedicated webhook scopes. HTTPS and basic hostname checks are enforced, but outbound delivery must not be enabled until DNS/IP SSRF defenses, redirect policy, request signing, and delivery timeouts are implemented.

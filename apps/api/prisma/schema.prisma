@@ -41,6 +41,7 @@ model Merchant {
   idempotencyKeys IdempotencyRecord[]
   apiKeys ApiKey[]
   outboxEvents OutboxEvent[]
+  webhookEndpoints WebhookEndpoint[]
 }
 model ApiKey {
   id String @id @default(cuid())
@@ -136,4 +137,21 @@ model OutboxEvent {
   @@unique([merchantId, dedupeKey])
   @@index([status, availableAt])
   @@index([merchantId, createdAt])
+}
+
+
+model WebhookEndpoint {
+  id String @id @default(cuid())
+  merchantId String
+  url String
+  enabled Boolean @default(true)
+  events String[] @default([])
+  secretCiphertext String
+  secretIv String
+  secretAuthTag String
+  secretKeyVersion Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  @@index([merchantId, enabled, createdAt])
 }
