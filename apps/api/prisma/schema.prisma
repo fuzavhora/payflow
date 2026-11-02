@@ -42,6 +42,7 @@ model Merchant {
   apiKeys ApiKey[]
   outboxEvents OutboxEvent[]
   webhookEndpoints WebhookEndpoint[]
+  webhookDeliveries WebhookDelivery[]
 }
 model ApiKey {
   id String @id @default(cuid())
@@ -154,4 +155,52 @@ model WebhookEndpoint {
   updatedAt DateTime @updatedAt
   merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   @@index([merchantId, enabled, createdAt])
+  deliveries WebhookDelivery[]
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  DEAD_LETTER
+}
+
+model WebhookDelivery {
+  id String @id @default(cuid())
+  merchantId String
+  endpointId String
+  outboxEventId String
+  status WebhookDeliveryStatus @default(PENDING)
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  lockedAt DateTime?
+  lockToken String?
+  lastStatusCode Int?
+  lastError String?
+  deliveredAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  outboxEvent OutboxEvent @relation(fields: [outboxEventId], references: [id], onDelete: Cascade)
+  attemptsLog WebhookDeliveryAttempt[]
+  @@unique([endpointId, outboxEventId])
+  @@index([status, nextAttemptAt])
+  @@index([merchantId, createdAt])
+}
+
+model WebhookDeliveryAttempt {
+  id String @id @default(cuid())
+  deliveryId String
+  attemptNumber Int
+  startedAt DateTime @default(now())
+  completedAt DateTime?
+  statusCode Int?
+  errorCode String?
+  errorMessage String?
+  durationMs Int?
+  delivery WebhookDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  @@unique([deliveryId, attemptNumber])
+  @@index([deliveryId, startedAt])
 }

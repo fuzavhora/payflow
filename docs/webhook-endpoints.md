@@ -25,6 +25,10 @@ Only HTTPS URLs with public-looking hostnames are accepted; literal IP addresses
 
 `WebhookSignatureService` signs the exact raw HTTP body bytes using HMAC-SHA256 over `timestamp + "." + rawBody` and emits `t=<unix-seconds>,v1=<hex-digest>`. Verification uses constant-time digest comparison and a default 300-second timestamp tolerance. Consumers must verify the raw request body, reject stale timestamps, and implement event-ID deduplication. `WebhookEndpointsService.getSecretForDelivery` decrypts an enabled endpoint secret for internal server-side delivery use only; never expose it through a controller or logs.
 
+## Durable delivery fanout
+
+`WebhookDeliveryService.fanout` materializes one database delivery row for every enabled endpoint subscribed to an outbox event. The unique `(endpointId, outboxEventId)` constraint plus `createMany(skipDuplicates)` makes fanout safe to retry. Delivery and attempt history are tenant-scoped when read. This stage persists work; it does not yet perform outbound HTTP requests.
+
 ## Not yet implemented
 
 Endpoint CRUD and secret encryption are implemented, but the outbox dispatcher is not yet connected to endpoints. HMAC request signing, timestamp/replay verification guidance, HTTP delivery, per-endpoint attempt history, timeout policy, SSRF-hardened DNS transport, secret rotation and manual replay are pending. Do not tell integrators that webhooks are being delivered yet.

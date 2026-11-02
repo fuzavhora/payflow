@@ -8,11 +8,12 @@ import { PaymentIntentsService } from "./payment-intents.service";
 import { WebhookEndpointsController } from "./webhook-endpoints.controller";
 import { WebhookEndpointsService } from "./webhook-endpoints.service";
 import { WebhookSignatureService } from "./webhook-signature.service";
+import { WebhookDeliveryService } from "./webhook-delivery.service";
 
 @Module({
   imports: [AuthModule],
   controllers: [PaymentIntentsController, WebhookEndpointsController],
-  providers: [PaymentIntentsService, PaymentIntentTransitionService, PaymentAttemptService, OutboxDispatcherService, WebhookEndpointsService, WebhookSignatureService],
+  providers: [PaymentIntentsService, PaymentIntentTransitionService, PaymentAttemptService, OutboxDispatcherService, WebhookEndpointsService, WebhookSignatureService, WebhookDeliveryService],
   exports: [PaymentIntentTransitionService, PaymentAttemptService, OutboxDispatcherService, WebhookEndpointsService, WebhookSignatureService],
 })
 export class PaymentsModule {}
