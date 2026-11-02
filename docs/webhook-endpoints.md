@@ -29,6 +29,10 @@ Only HTTPS URLs with public-looking hostnames are accepted; literal IP addresses
 
 `WebhookDeliveryService.fanout` materializes one database delivery row for every enabled endpoint subscribed to an outbox event. The unique `(endpointId, outboxEventId)` constraint plus `createMany(skipDuplicates)` makes fanout safe to retry. Delivery and attempt history are tenant-scoped when read. This stage persists work; it does not yet perform outbound HTTP requests.
 
+## Outbound transport security primitive
+
+`SecureWebhookHttpTransport` is a server-side HTTPS POST transport that resolves all A/AAAA records, rejects the host if any answer is non-public, pins the selected validated address for TLS HTTP connection, refuses redirects, enforces a bounded timeout, and caps response-body consumption. It currently exposes a transport primitive only; the delivery worker must call it and persist each result before webhook delivery is considered operational. Network policy should be reviewed and tested against the deployment environment and current IANA special-purpose registries before production use.
+
 ## Not yet implemented
 
 Endpoint CRUD and secret encryption are implemented, but the outbox dispatcher is not yet connected to endpoints. HMAC request signing, timestamp/replay verification guidance, HTTP delivery, per-endpoint attempt history, timeout policy, SSRF-hardened DNS transport, secret rotation and manual replay are pending. Do not tell integrators that webhooks are being delivered yet.
