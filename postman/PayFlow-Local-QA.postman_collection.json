@@ -1,0 +1,425 @@
+{
+  "info": {
+    "name": "PayFlow Local API - Manual QA",
+    "description": "Manual smoke and tenant-isolation tests for the current PayFlow development API. Uses only local test keys and local database records. PaymentIntent creation does not charge money.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{apiKey}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000/api/v1"
+    },
+    {
+      "key": "apiKey",
+      "value": "pf_test_REPLACE_WITH_LOCAL_TEST_KEY"
+    },
+    {
+      "key": "customerId",
+      "value": ""
+    },
+    {
+      "key": "paymentIntentId",
+      "value": ""
+    },
+    {
+      "key": "idempotencyKey",
+      "value": "manual-order-000001"
+    },
+    {
+      "key": "webhookEndpointId",
+      "value": ""
+    },
+    {
+      "key": "deliveryId",
+      "value": ""
+    },
+    {
+      "key": "webhookReceiverUrl",
+      "value": "https://REPLACE_WITH_YOUR_HTTPS_RECEIVER"
+    }
+  ],
+  "item": [
+    {
+      "name": "00 - Health",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('API and database healthy', () => pm.response.to.have.status(200));",
+                  "pm.test('Health payload is ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 - Authentication and scopes",
+      "item": [
+        {
+          "name": "Missing API key (expect 401)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/customers",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Missing key rejected', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Current key - list customers",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/customers"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Customers",
+      "item": [
+        {
+          "name": "Create customer (stores customerId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"  manual.qa@example.com  \",\n  \"name\": \"Manual QA Customer\",\n  \"metadata\": { \"source\": \"postman-manual-qa\" }\n}"
+            },
+            "url": "{{baseUrl}}/customers"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Customer created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.data.email).to.eql('manual.qa@example.com');",
+                  "pm.environment.set('customerId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List customers",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/customers?page=1&limit=20"
+          }
+        },
+        {
+          "name": "Get created customer",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/customers/{{customerId}}"
+          }
+        },
+        {
+          "name": "Create duplicate customer (expect 409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"manual.qa@example.com\"\n}"
+            },
+            "url": "{{baseUrl}}/customers"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Duplicate email rejected', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 - PaymentIntents (local records only)",
+      "item": [
+        {
+          "name": "Create PaymentIntent (stores ID)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 2599,\n  \"currency\": \"USD\",\n  \"customerId\": \"{{customerId}}\",\n  \"description\": \"Manual QA - no real charge\",\n  \"metadata\": { \"testRun\": \"postman\", \"order\": \"manual-001\" }\n}"
+            },
+            "url": "{{baseUrl}}/payment-intents"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('PaymentIntent record created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.data.amount).to.eql('2599');",
+                  "pm.expect(body.data.status).to.eql('requires_payment_method');",
+                  "pm.environment.set('paymentIntentId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Repeat create with same key and same request (expect replay)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 2599,\n  \"currency\": \"USD\",\n  \"customerId\": \"{{customerId}}\",\n  \"description\": \"Manual QA - no real charge\",\n  \"metadata\": { \"testRun\": \"postman\", \"order\": \"manual-001\" }\n}"
+            },
+            "url": "{{baseUrl}}/payment-intents"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Idempotent replay returned', () => pm.response.to.have.status(201));",
+                  "pm.expect(pm.response.json().idempotentReplay).to.eql(true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reuse same key with changed amount (expect 409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 2600,\n  \"currency\": \"USD\",\n  \"customerId\": \"{{customerId}}\",\n  \"description\": \"Manual QA - changed payload\"\n}"
+            },
+            "url": "{{baseUrl}}/payment-intents"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Changed payload rejected', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List PaymentIntents",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/payment-intents?page=1&limit=20"
+          }
+        },
+        {
+          "name": "Get created PaymentIntent",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/payment-intents/{{paymentIntentId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Webhook endpoint configuration",
+      "item": [
+        {
+          "name": "Create HTTPS webhook endpoint (stores endpoint ID)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"{{webhookReceiverUrl}}\",\n  \"events\": [\"payment_intent.succeeded\", \"payment_intent.failed\"]\n}"
+            },
+            "url": "{{baseUrl}}/webhook-endpoints"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Webhook endpoint created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.secret).to.be.a('string');",
+                  "pm.environment.set('webhookEndpointId', body.id);",
+                  "console.warn('Save the webhook signing secret securely now. It is returned only once: ' + body.secret);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List webhook endpoints (secret must not be returned)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/webhook-endpoints"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Endpoint list excludes secret material', () => { pm.response.to.have.status(200); const text = pm.response.text(); pm.expect(text).not.to.include('secretCiphertext'); pm.expect(text).not.to.include('whsec_'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Disable webhook endpoint",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/webhook-endpoints/{{webhookEndpointId}}"
+          }
+        },
+        {
+          "name": "Re-enable webhook endpoint",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": true\n}"
+            },
+            "url": "{{baseUrl}}/webhook-endpoints/{{webhookEndpointId}}"
+          }
+        },
+        {
+          "name": "Rotate signing secret (save returned secret)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/webhook-endpoints/{{webhookEndpointId}}/rotate-secret"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Secret rotated', () => pm.response.to.have.status(201));",
+                  "console.warn('Store the newly returned secret securely: ' + pm.response.json().secret);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 - Webhook delivery inspection",
+      "item": [
+        {
+          "name": "List deliveries",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/webhook-deliveries?take=50"
+          }
+        },
+        {
+          "name": "Get delivery by ID (set deliveryId first)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/webhook-deliveries/{{deliveryId}}"
+          }
+        },
+        {
+          "name": "Replay failed/dead-letter delivery (set deliveryId first)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/webhook-deliveries/{{deliveryId}}/replay"
+          }
+        }
+      ]
+    }
+  ]
+}
