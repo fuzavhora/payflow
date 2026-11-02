@@ -151,6 +151,11 @@ model WebhookEndpoint {
   secretIv String
   secretAuthTag String
   secretKeyVersion Int @default(1)
+  previousSecretCiphertext String?
+  previousSecretIv String?
+  previousSecretAuthTag String?
+  previousSecretKeyVersion Int?
+  previousSecretExpiresAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)

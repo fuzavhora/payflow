@@ -29,6 +29,12 @@ export class WebhookEndpointsController {
     return this.webhooks.update(request.merchantId, id, dto);
   }
 
+  @Post(":id/rotate-secret")
+  @RequireScopes("webhooks:write")
+  rotateSecret(@Req() request: MerchantRequest, @Param("id") id: string) {
+    return this.webhooks.rotateSecret(request.merchantId, id);
+  }
+
   @Delete(":id")
   @RequireScopes("webhooks:write")
   disable(@Req() request: MerchantRequest, @Param("id") id: string) {
