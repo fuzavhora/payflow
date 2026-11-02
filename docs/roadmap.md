@@ -1,54 +1,34 @@
 # PayFlow Roadmap
 
-This roadmap is intentionally milestone-based. A feature is not complete because a screen exists; it is complete when its data model, API behavior, failure handling, tests, and documentation are covered.
+## Foundation
+- [x] Public repository and architecture baseline.
+- [x] Monorepo structure and feature branch.
+- [x] Responsive dashboard with fictional sample data.
+- [x] NestJS API bootstrap and database-backed health endpoint.
+- [x] PostgreSQL schema baseline and local infrastructure.
+- [ ] Install dependencies and run build, lint, and test verification.
+- [ ] CI workflow and license selection.
 
-## Milestone 0 — Foundation
-- [x] Create public GitHub repository.
-- [x] Establish protected development branch workflow by convention.
-- [x] Document product boundary and architecture baseline.
-- [ ] Select and add an open-source license.
-- [ ] Add workspace manifests and application scaffolds.
-- [ ] Add formatting, linting, type-checking, and test commands.
-- [ ] Add CI checks and dependency/security scanning.
-- [ ] Add contribution templates and code of conduct.
-
-## Milestone 1 — Platform skeleton
-- [ ] Next.js public site and authenticated dashboard shell.
-- [ ] NestJS API health, configuration, and OpenAPI.
-- [ ] PostgreSQL + Prisma schema and migration workflow.
-- [ ] Redis + BullMQ worker process.
-- [ ] Docker Compose for local development.
-- [ ] Environment variable validation and safe example configuration.
-
-## Milestone 2 — Merchant and developer foundation
-- [ ] Merchant/organization model and tenant isolation.
-- [ ] Authentication, sessions, and role-based access.
+## Merchant and developer platform
+- [ ] Merchant model, tenant isolation, authentication, and roles.
 - [ ] Test/live environment separation.
 - [ ] API key creation, hashing, rotation, and revocation.
-- [ ] Audit log for security-sensitive operations.
+- [ ] Audit records for privileged operations.
 
-## Milestone 3 — Payments core
-- [ ] PaymentIntent and PaymentAttempt domain model.
-- [ ] State machine and transition tests.
+## Payments core
+- [ ] PaymentIntent and PaymentAttempt state machine.
 - [ ] Merchant-scoped idempotency.
-- [ ] First provider adapter in sandbox/test mode.
-- [ ] Refund lifecycle.
-- [ ] Reconciliation and operational event history.
+- [ ] First provider adapter in sandbox mode.
+- [ ] Refund lifecycle and reconciliation.
 
-## Milestone 4 — Webhooks and billing
-- [ ] Transactional outbox.
-- [ ] Signed webhook delivery, retries, and replay tooling.
-- [ ] Customers and saved provider tokens (never raw card data).
+## Webhooks and billing
+- [ ] Transactional outbox and signed webhook delivery.
+- [ ] Retry and replay tooling.
 - [ ] Products, prices, subscriptions, and invoices.
-- [ ] Subscription lifecycle and billing retry policies.
 
-## Milestone 5 — Public developer experience
-- [ ] API reference and integration guides.
-- [ ] SDK and typed contracts.
+## Developer experience
+- [ ] API reference, SDK, integration guides, and examples.
 - [ ] Local sandbox and webhook inspector.
-- [ ] Example integrations.
 - [ ] Self-hosting and upgrade documentation.
 
-## Release gates
-
-A release that handles real payment traffic must not be declared production-ready until security review, provider certification/approval where applicable, regulatory review for target markets, threat modeling, backup/restore drills, load testing, incident runbooks, and an appropriate PCI scope assessment are complete.
+Do not declare production readiness until security review, provider approval, regulatory review, threat modeling, backup/restore drills, load testing, incident runbooks, and PCI scope assessment are complete.

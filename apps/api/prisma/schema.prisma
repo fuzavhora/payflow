@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+enum PaymentIntentStatus {
+  REQUIRES_PAYMENT_METHOD
+  REQUIRES_CONFIRMATION
+  PROCESSING
+  SUCCEEDED
+  CANCELED
+  FAILED
+}
+enum PaymentAttemptStatus {
+  CREATED
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELED
+}
+model Merchant {
+  id String @id @default(cuid())
+  name String
+  slug String @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  customers Customer[]
+  paymentIntents PaymentIntent[]
+  idempotencyKeys IdempotencyRecord[]
+}
+model Customer {
+  id String @id @default(cuid())
+  merchantId String
+  email String
+  name String?
+  metadata Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  payments PaymentIntent[]
+  @@unique([merchantId, email])
+  @@index([merchantId, createdAt])
+}
+model PaymentIntent {
+  id String @id @default(cuid())
+  merchantId String
+  customerId String?
+  amount BigInt
+  currency String @db.Char(3)
+  status PaymentIntentStatus @default(REQUIRES_PAYMENT_METHOD)
+  description String?
+  metadata Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  attempts PaymentAttempt[]
+  @@index([merchantId, status, createdAt])
+  @@index([customerId, createdAt])
+}
+model PaymentAttempt {
+  id String @id @default(cuid())
+  paymentIntentId String
+  provider String
+  providerReference String?
+  status PaymentAttemptStatus @default(CREATED)
+  failureCode String?
+  failureMessage String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  paymentIntent PaymentIntent @relation(fields: [paymentIntentId], references: [id], onDelete: Restrict)
+  @@unique([provider, providerReference])
+  @@index([paymentIntentId, createdAt])
+}
+model IdempotencyRecord {
+  id String @id @default(cuid())
+  merchantId String
+  key String
+  requestHash String
+  responseStatus Int?
+  responseBody Json?
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  @@unique([merchantId, key])
+  @@index([expiresAt])
+}
