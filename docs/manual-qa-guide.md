@@ -28,11 +28,22 @@ docker compose up -d postgres redis
 pnpm db:generate
 ```
 
-Apply the Prisma schema to your local development database using the documented migration workflow. If no committed migration baseline exists yet, the current local-only fallback is:
+Create a separate disposable database for manual QA. The Compose file creates the `payflow` database; create a second database named `payflow_test`:
 
-```pnpm --filter @payflow/api prisma:test:reset```
+```bash
+docker exec payflow-postgres createdb -U payflow payflow_test
+export DATABASE_URL="postgresql://payflow:payflow_local@localhost:5432/payflow_test?schema=public"
+```
 
-**Warning:** that command uses `prisma db push --accept-data-loss`. It is destructive to the target schema. Only use it against a disposable local database, never production or a shared environment.
+If the database already exists, do not recreate it; reuse it or reset it only when you are certain it contains disposable QA data. Keep this `DATABASE_URL` exported in the same terminal for the following Prisma commands and API process.
+
+If no committed migration baseline exists yet, initialize only this disposable QA schema:
+
+```bash
+pnpm --filter @payflow/api prisma:test:reset
+```
+
+**Warning:** this command uses `prisma db push --accept-data-loss`. It can destroy data in the target schema. Never run it against production, shared environments, or your normal development database.
 
 Configure webhook encryption in `.env`:
 
