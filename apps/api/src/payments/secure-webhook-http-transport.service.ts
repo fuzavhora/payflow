@@ -6,6 +6,8 @@ import { URL } from "node:url";
 
 export interface WebhookHttpResult { statusCode: number; durationMs: number; }
 
+const DNS_RESOLUTION_TIMEOUT_MS = 3000;
+
 /**
  * HTTPS-only transport with DNS resolution, address screening and pinned lookup.
  * Redirects are never followed. Every resolved address must be globally routable.
@@ -39,7 +41,7 @@ export class SecureWebhookHttpTransport {
     if (url.protocol !== "https:" || url.username || url.password || url.hash) throw new Error("Webhook destination must be a clean HTTPS URL.");
     if (!Number.isInteger(timeoutMs) || timeoutMs < 500 || timeoutMs > 30000) throw new RangeError("Webhook timeout must be between 500 and 30000 milliseconds.");
 
-    const resolved = await lookup(url.hostname, { all: true, verbatim: true });
+    const resolved = await this.resolveWithTimeout(url.hostname);
     if (resolved.length === 0) throw new Error("Webhook hostname did not resolve.");
     for (const entry of resolved) {
       if (!this.isPublicAddress(entry.address, entry.family)) throw new Error("Webhook hostname resolves to a non-public IP address.");
@@ -71,6 +73,19 @@ export class SecureWebhookHttpTransport {
       req.on("error", reject);
       req.end(body);
     });
+  }
+
+  private async resolveWithTimeout(hostname: string) {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error("Webhook hostname DNS resolution timed out.")), DNS_RESOLUTION_TIMEOUT_MS);
+      timer.unref?.();
+    });
+    try {
+      return await Promise.race([lookup(hostname, { all: true, verbatim: true }), timeout]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   private isPublicAddress(address: string, family: number): boolean {
