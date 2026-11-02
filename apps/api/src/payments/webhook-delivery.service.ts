@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { OutboxMessage } from "./outbox-dispatcher.service";
@@ -7,10 +7,6 @@ import { OutboxMessage } from "./outbox-dispatcher.service";
 export class WebhookDeliveryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * Materializes one durable delivery per subscribed endpoint.
-   * Safe to retry: the endpoint/event unique key prevents duplicate fanout.
-   */
   async fanout(message: OutboxMessage): Promise<number> {
     const endpoints = await this.prisma.webhookEndpoint.findMany({
       where: { merchantId: message.merchantId, enabled: true, events: { has: message.eventType } },
@@ -26,6 +22,35 @@ export class WebhookDeliveryService {
       skipDuplicates: true,
     });
     return result.count;
+  }
+
+  async replay(merchantId: string, deliveryId: string) {
+    const updated = await this.prisma.webhookDelivery.updateMany({
+      where: {
+        id: deliveryId,
+        merchantId,
+        status: { in: ["FAILED", "DEAD_LETTER"] },
+        endpoint: { is: { enabled: true } },
+      },
+      data: {
+        status: "PENDING",
+        attemptsInCycle: 0,
+        nextAttemptAt: new Date(),
+        lockedAt: null,
+        lockToken: null,
+        lastStatusCode: null,
+        lastError: null,
+      },
+    });
+    if (updated.count !== 1) {
+      const existing = await this.prisma.webhookDelivery.findFirst({
+        where: { id: deliveryId, merchantId },
+        select: { id: true, status: true },
+      });
+      if (!existing) throw new NotFoundException("Webhook delivery not found.");
+      throw new ConflictException("Only failed or dead-lettered deliveries with an enabled endpoint can be replayed.");
+    }
+    return this.getDelivery(merchantId, deliveryId);
   }
 
   async getDelivery(merchantId: string, deliveryId: string) {
@@ -44,7 +69,7 @@ export class WebhookDeliveryService {
       where: { merchantId },
       orderBy: { createdAt: "desc" },
       take: Math.min(Math.max(take, 1), 100),
-      select: { id: true, endpointId: true, outboxEventId: true, status: true, attempts: true, nextAttemptAt: true, lastStatusCode: true, lastError: true, deliveredAt: true, createdAt: true },
+      select: { id: true, endpointId: true, outboxEventId: true, status: true, attempts: true, attemptsInCycle: true, nextAttemptAt: true, lastStatusCode: true, lastError: true, deliveredAt: true, createdAt: true },
     });
   }
 }

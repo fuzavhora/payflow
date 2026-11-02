@@ -2,66 +2,55 @@
 
 ## API
 
-All routes require a merchant API key. Required scopes:
-- `webhooks:write`: create, update, disable endpoints.
+All routes require a merchant API key:
+- `webhooks:write`: create, update, disable endpoints and replay failed deliveries.
 - `webhooks:read`: list endpoints and inspect deliveries.
 
 - `POST /api/v1/webhook-endpoints` — register URL and event types.
 - `GET /api/v1/webhook-endpoints` — list current merchant endpoints.
 - `PATCH /api/v1/webhook-endpoints/:id` — update URL, enabled state, or event subscriptions.
-- `DELETE /api/v1/webhook-endpoints/:id` — disable endpoint (soft disable).
+- `DELETE /api/v1/webhook-endpoints/:id` — disable endpoint.
 - `GET /api/v1/webhook-deliveries` — list merchant delivery records.
-- `GET /api/v1/webhook-deliveries/:id` — retrieve one delivery and its attempt history.
+- `GET /api/v1/webhook-deliveries/:id` — retrieve a delivery and its attempt history.
+- `POST /api/v1/webhook-deliveries/:id/replay` — requeue a FAILED or DEAD_LETTER delivery if its endpoint is enabled.
 
-Every database operation is scoped by authenticated merchant ID. The API never accepts merchant ID from the request body. Plaintext signing secret is returned only once at creation; list/update responses never expose encrypted or plaintext secret material.
+Replay preserves lifetime attempt history and resets only the retry-cycle counter. Concurrent replay requests are safe: only the first can transition a terminal delivery back to PENDING. SUCCEEDED, PROCESSING, and PENDING deliveries cannot be replayed. Replay does not guarantee that the remote endpoint did not previously receive the event; consumers must deduplicate by event ID.
 
 ## Secret storage
 
-A random 256-bit secret is generated per endpoint. It is encrypted at rest using AES-256-GCM with a random 96-bit IV and authentication tag. Configure `PAYFLOW_WEBHOOK_ENCRYPTION_KEY` as exactly 64 hex characters (32 bytes). Keep this key in a secret manager, not source control. The schema records a key version to support a future rotation procedure.
+A random 256-bit secret is generated per endpoint and encrypted using AES-256-GCM. Configure `PAYFLOW_WEBHOOK_ENCRYPTION_KEY` as exactly 64 hex characters. Keep it in a secret manager. The key version field is reserved for a future encryption-key migration.
 
 ## URL safety
 
-Only HTTPS URLs with public-looking hostnames are accepted at registration. At delivery time the worker resolves all A/AAAA records, rejects the hostname if any answer is non-public, pins the selected validated address for the HTTPS request, verifies TLS certificates, does not follow redirects, bounds request time, and caps response-body consumption. This reduces DNS-rebinding and redirect-based SSRF exposure, but the network policy still requires review against current IANA special-purpose registries and deployment-specific egress controls before production.
+Only HTTPS URLs with public-looking hostnames are accepted at registration. At delivery time the worker resolves all A/AAAA records, rejects any non-public answer, pins the selected validated address, verifies TLS, does not follow redirects, bounds request time, and caps response-body consumption. Add deployment-level egress controls and review address policy against current IANA special-purpose registries before production.
 
-## Signature and event format
+## Event format and signatures
 
-The worker sends a deterministic JSON envelope:
-```json
-{
-  "id": "outbox_event_id",
-  "type": "payment_intent.succeeded",
-  "created": "2026-11-02T00:00:00.000Z",
-  "data": {}
-}
-```
+The worker sends a deterministic JSON envelope containing `id`, `type`, `created`, and `data`. The exact raw body bytes are signed using HMAC-SHA256 over `timestamp + "." + rawBody`.
 
-The exact raw body bytes are signed using HMAC-SHA256 over `timestamp + "." + rawBody`. Headers:
+Headers:
 - `PayFlow-Signature: t=<unix-seconds>,v1=<hex-digest>`
-- `PayFlow-Event-Id`: stable outbox event ID; use this for consumer deduplication.
-- `PayFlow-Delivery-Id`: endpoint-specific delivery record ID.
+- `PayFlow-Event-Id`: stable outbox event ID for consumer deduplication.
+- `PayFlow-Delivery-Id`: endpoint-specific delivery ID.
 
-Consumers must verify the raw request body and signature, enforce a timestamp tolerance, and deduplicate by event ID. Delivery is at least once: a worker crash after the remote endpoint accepts a request but before local acknowledgement can cause a duplicate.
+Delivery is at least once, not exactly once. A worker crash after remote acceptance but before local acknowledgement can cause duplicates.
 
 ## Worker runtime
 
-The API process does not start background work. Build the API, configure the database and `PAYFLOW_WEBHOOK_ENCRYPTION_KEY`, then run the separate worker process:
+The API process does not start background work. Configure `PAYFLOW_WEBHOOK_ENCRYPTION_KEY`, build, and run:
 ```bash
 pnpm --filter @payflow/api build
 pnpm --filter @payflow/api worker:webhooks
 ```
 
-Optional environment variables:
-- `WEBHOOK_WORKER_POLL_INTERVAL_MS` — polling delay, default 1000 ms, bounded 250–60000.
-- Worker defaults: batch 25, 60-second lease, 8 attempts, 8-second HTTPS timeout, exponential retry with jitter capped at one hour.
-
-Run one or more worker replicas. PostgreSQL `FOR UPDATE SKIP LOCKED` and per-row lease tokens coordinate concurrent claims. The request timeout is intentionally shorter than the default lease; unusually slow DNS or process pauses can still outlive a lease, so consumers must deduplicate.
+`WEBHOOK_WORKER_POLL_INTERVAL_MS` defaults to 1000 ms (250–60000). Worker defaults: batch 25, 60-second lease, 8 attempts per retry cycle, 8-second HTTPS timeout, exponential backoff with jitter. Run one or more replicas; PostgreSQL row locks and lock tokens coordinate claims.
 
 ## Delivery states
 
-- `PENDING`: waiting for initial delivery or retry.
-- `PROCESSING`: claimed by a worker with a lease.
+- `PENDING`: awaiting initial delivery or retry.
+- `PROCESSING`: claimed by a worker.
 - `SUCCEEDED`: endpoint returned 2xx.
-- `FAILED`: permanent HTTP 3xx/4xx response (except 408, 409, 425, 429) or disabled endpoint.
-- `DEAD_LETTER`: transient/network failure exhausted the attempt limit.
+- `FAILED`: permanent 3xx/4xx response (except 408, 409, 425, 429) or disabled endpoint.
+- `DEAD_LETTER`: transient/network failure exhausted the retry-cycle limit.
 
-Each claimed attempt is persisted before network I/O and completed with response status, duration, or bounded error details. Expired in-progress attempts are marked as lease-expired before a new attempt is created. There is no manual replay endpoint, secret rotation API, delivery metrics/alerting, or admin dead-letter tooling yet.
+Attempt records are retained across manual replay. Manual replay is not implemented for successful deliveries. Secret rotation API, delivery metrics, alerting, admin dead-letter tooling, provider integration and real money movement remain out of scope.

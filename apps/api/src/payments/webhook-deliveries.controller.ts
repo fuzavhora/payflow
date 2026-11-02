@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, Req, UseGuards } from "@nestjs/common";
+import { Controller, Get, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { ApiKeyGuard } from "../auth/api-key.guard";
 import { RequireScopes } from "../auth/require-scopes.decorator";
 import { MerchantRequest } from "../common/merchant-request";
@@ -20,5 +20,11 @@ export class WebhookDeliveriesController {
   @RequireScopes("webhooks:read")
   get(@Req() request: MerchantRequest, @Param("id") id: string) {
     return this.deliveries.getDelivery(request.merchantId, id);
+  }
+
+  @Post(":id/replay")
+  @RequireScopes("webhooks:write")
+  replay(@Req() request: MerchantRequest, @Param("id") id: string) {
+    return this.deliveries.replay(request.merchantId, id);
   }
 }

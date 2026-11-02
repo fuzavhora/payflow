@@ -141,7 +141,6 @@ model OutboxEvent {
   @@index([merchantId, createdAt])
 }
 
-
 model WebhookEndpoint {
   id String @id @default(cuid())
   merchantId String
@@ -174,6 +173,7 @@ model WebhookDelivery {
   outboxEventId String
   status WebhookDeliveryStatus @default(PENDING)
   attempts Int @default(0)
+  attemptsInCycle Int @default(0)
   nextAttemptAt DateTime @default(now())
   lockedAt DateTime?
   lockToken String?

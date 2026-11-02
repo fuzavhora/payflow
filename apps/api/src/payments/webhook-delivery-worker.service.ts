@@ -14,6 +14,7 @@ interface ClaimedDelivery {
   endpointId: string;
   outboxEventId: string;
   attempts: number;
+  attemptsInCycle: number;
   lockToken: string;
 }
 
@@ -85,7 +86,7 @@ export class WebhookDeliveryWorkerService {
           ? error.statusCode : undefined;
         const permanent = error instanceof PermanentWebhookDeliveryError ||
           (statusCode !== undefined && statusCode >= 300 && statusCode < 500 && ![408, 409, 425, 429].includes(statusCode));
-        const deadLetter = !permanent && delivery.attempts >= maxAttempts;
+        const deadLetter = !permanent && delivery.attemptsInCycle >= maxAttempts;
         const outcome: {
           success: false;
           errorCode: string;
@@ -120,7 +121,7 @@ export class WebhookDeliveryWorkerService {
     const lockToken = randomUUID();
     return this.prisma.$transaction(async (tx) => {
       const claimed = await tx.$queryRawUnsafe<ClaimedDelivery[]>(
-        'WITH candidates AS ( SELECT "id" FROM "WebhookDelivery" WHERE ("status" = \'PENDING\'::"WebhookDeliveryStatus" AND "nextAttemptAt" <= NOW()) OR ("status" = \'PROCESSING\'::"WebhookDeliveryStatus" AND "lockedAt" < NOW() - ($1 * INTERVAL \'1 second\')) ORDER BY "nextAttemptAt" ASC, "createdAt" ASC FOR UPDATE SKIP LOCKED LIMIT $2 ) UPDATE "WebhookDelivery" AS delivery SET "status" = \'PROCESSING\'::"WebhookDeliveryStatus", "attempts" = delivery."attempts" + 1, "lockedAt" = NOW(), "lockToken" = $3 FROM candidates WHERE delivery."id" = candidates."id" RETURNING delivery."id", delivery."merchantId", delivery."endpointId", delivery."outboxEventId", delivery."attempts", delivery."lockToken"',
+        'WITH candidates AS ( SELECT "id" FROM "WebhookDelivery" WHERE ("status" = \'PENDING\'::"WebhookDeliveryStatus" AND "nextAttemptAt" <= NOW()) OR ("status" = \'PROCESSING\'::"WebhookDeliveryStatus" AND "lockedAt" < NOW() - ($1 * INTERVAL \'1 second\')) ORDER BY "nextAttemptAt" ASC, "createdAt" ASC FOR UPDATE SKIP LOCKED LIMIT $2 ) UPDATE "WebhookDelivery" AS delivery SET "status" = \'PROCESSING\'::"WebhookDeliveryStatus", "attempts" = delivery."attempts" + 1, "attemptsInCycle" = delivery."attemptsInCycle" + 1, "lockedAt" = NOW(), "lockToken" = $3 FROM candidates WHERE delivery."id" = candidates."id" RETURNING delivery."id", delivery."merchantId", delivery."endpointId", delivery."outboxEventId", delivery."attempts", delivery."attemptsInCycle", delivery."lockToken"',
         leaseSeconds, batchSize, lockToken,
       );
       for (const delivery of claimed) {
