@@ -23,6 +23,7 @@ export interface WebhookWorkerOptions {
   leaseSeconds?: number;
   maxAttempts?: number;
   timeoutMs?: number;
+  concurrency?: number;
   baseRetryDelayMs?: number;
   maxRetryDelayMs?: number;
 }
@@ -65,6 +66,11 @@ export class WebhookDeliveryWorkerService {
     const leaseSeconds = this.integerOption(options.leaseSeconds, 60, 10, 3600);
     const maxAttempts = this.integerOption(options.maxAttempts, 8, 1, 100);
     const timeoutMs = this.integerOption(options.timeoutMs, 8000, 500, 30000);
+    const concurrency = this.integerOption(options.concurrency, 10, 1, 25);
+    const minimumLeaseSeconds = Math.ceil((Math.ceil(batchSize / concurrency) * timeoutMs) / 1000) + 15;
+    if (leaseSeconds < minimumLeaseSeconds) {
+      throw new RangeError(`Lease must be at least ${minimumLeaseSeconds} seconds for the configured batch, concurrency and timeout.`);
+    }
     const baseRetryDelayMs = this.integerOption(options.baseRetryDelayMs, 1000, 100, 3600000);
     const maxRetryDelayMs = this.integerOption(options.maxRetryDelayMs, 3600000, baseRetryDelayMs, 86400000);
 
@@ -76,45 +82,59 @@ export class WebhookDeliveryWorkerService {
     const claimed = await this.claimDeliveries(batchSize, leaseSeconds);
     const summary = { claimed: claimed.length, succeeded: 0, retried: 0, failed: 0, deadLettered: 0 };
 
-    for (const delivery of claimed) {
-      try {
-        const result = await this.send(delivery, timeoutMs);
-        await this.complete(delivery, { success: true, statusCode: result.statusCode, durationMs: result.durationMs });
-        summary.succeeded++;
-      } catch (error) {
-        const statusCode = error instanceof WebhookHttpStatusError || error instanceof PermanentWebhookDeliveryError
-          ? error.statusCode : undefined;
-        const permanent = error instanceof PermanentWebhookDeliveryError ||
-          (statusCode !== undefined && statusCode >= 300 && statusCode < 500 && ![408, 409, 425, 429].includes(statusCode));
-        const deadLetter = !permanent && delivery.attemptsInCycle >= maxAttempts;
-        const outcome: {
-          success: false;
-          errorCode: string;
-          errorMessage: string;
-          terminalStatus?: WebhookDeliveryStatus;
-          retryAt?: Date;
-          statusCode?: number;
-        } = {
-          success: false,
-          errorCode: error instanceof PermanentWebhookDeliveryError
-            ? error.errorCode : statusCode !== undefined ? `HTTP_${statusCode}` : "DELIVERY_ERROR",
-          errorMessage: this.safeErrorMessage(error),
-        };
-        if (statusCode !== undefined) outcome.statusCode = statusCode;
-        if (permanent) outcome.terminalStatus = WebhookDeliveryStatus.FAILED;
-        else if (deadLetter) outcome.terminalStatus = WebhookDeliveryStatus.DEAD_LETTER;
-        else outcome.retryAt = new Date(Date.now() + this.retryDelay(delivery.attempts, baseRetryDelayMs, maxRetryDelayMs));
-        await this.complete(delivery, outcome);
-        if (permanent) summary.failed++;
-        else if (deadLetter) summary.deadLettered++;
-        else summary.retried++;
-      }
+    for (let offset = 0; offset < claimed.length; offset += concurrency) {
+      const wave = claimed.slice(offset, offset + concurrency);
+      await Promise.all(wave.map((delivery) => this.processDelivery(
+        delivery, timeoutMs, maxAttempts, baseRetryDelayMs, maxRetryDelayMs, summary,
+      )));
     }
 
     if (claimed.length > 0 || outbox.claimed > 0) {
       this.logger.log(`Webhook worker: ${outbox.published} outbox events fanned out; ${summary.succeeded} delivered, ${summary.retried} scheduled for retry, ${summary.failed} failed, ${summary.deadLettered} dead-lettered.`);
     }
     return { outbox, deliveries: summary };
+  }
+
+  private async processDelivery(
+    delivery: ClaimedDelivery,
+    timeoutMs: number,
+    maxAttempts: number,
+    baseRetryDelayMs: number,
+    maxRetryDelayMs: number,
+    summary: { succeeded: number; retried: number; failed: number; deadLettered: number },
+  ): Promise<void> {
+    try {
+      const result = await this.send(delivery, timeoutMs);
+      await this.complete(delivery, { success: true, statusCode: result.statusCode, durationMs: result.durationMs });
+      summary.succeeded++;
+    } catch (error) {
+      const statusCode = error instanceof WebhookHttpStatusError || error instanceof PermanentWebhookDeliveryError
+        ? error.statusCode : undefined;
+      const permanent = error instanceof PermanentWebhookDeliveryError ||
+        (statusCode !== undefined && statusCode >= 300 && statusCode < 500 && ![408, 409, 425, 429].includes(statusCode));
+      const deadLetter = !permanent && delivery.attemptsInCycle >= maxAttempts;
+      const outcome: {
+        success: false;
+        errorCode: string;
+        errorMessage: string;
+        terminalStatus?: WebhookDeliveryStatus;
+        retryAt?: Date;
+        statusCode?: number;
+      } = {
+        success: false,
+        errorCode: error instanceof PermanentWebhookDeliveryError
+          ? error.errorCode : statusCode !== undefined ? `HTTP_${statusCode}` : "DELIVERY_ERROR",
+        errorMessage: this.safeErrorMessage(error),
+      };
+      if (statusCode !== undefined) outcome.statusCode = statusCode;
+      if (permanent) outcome.terminalStatus = WebhookDeliveryStatus.FAILED;
+      else if (deadLetter) outcome.terminalStatus = WebhookDeliveryStatus.DEAD_LETTER;
+      else outcome.retryAt = new Date(Date.now() + this.retryDelay(delivery.attemptsInCycle, baseRetryDelayMs, maxRetryDelayMs));
+      await this.complete(delivery, outcome);
+      if (permanent) summary.failed++;
+      else if (deadLetter) summary.deadLettered++;
+      else summary.retried++;
+    }
   }
 
   private async claimDeliveries(batchSize: number, leaseSeconds: number): Promise<ClaimedDelivery[]> {
