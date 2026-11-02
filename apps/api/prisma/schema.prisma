@@ -20,7 +20,7 @@ enum PaymentAttemptStatus {
   FAILED
   CANCELED
 }
-enum ApiKeyEnvironment {
+enum OutboxEventStatus {\n  PENDING\n  PROCESSING\n  PUBLISHED\n  DEAD_LETTER\n}\nenum ApiKeyEnvironment {
   TEST
   LIVE
 }
@@ -107,4 +107,25 @@ model IdempotencyRecord {
   merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   @@unique([merchantId, key])
   @@index([expiresAt])
+}
+
+model OutboxEvent {
+  id String @id @default(cuid())
+  merchantId String
+  eventType String
+  aggregateType String
+  aggregateId String
+  dedupeKey String
+  payload Json
+  status OutboxEventStatus @default(PENDING)
+  attempts Int @default(0)
+  availableAt DateTime @default(now())
+  lockedAt DateTime?
+  publishedAt DateTime?
+  lastError String?
+  createdAt DateTime @default(now())
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  @@unique([merchantId, dedupeKey])
+  @@index([status, availableAt])
+  @@index([merchantId, createdAt])
 }

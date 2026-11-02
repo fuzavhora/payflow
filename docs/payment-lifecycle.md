@@ -15,38 +15,38 @@ The API currently supports creating, listing, and retrieving local PaymentIntent
 | `failed` | none (terminal) |
 | `canceled` | none (terminal) |
 
-The pure domain policy is implemented under `apps/api/src/payments/domain`. The internal transition service applies valid state changes using a merchant-scoped compare-and-swap update.
+The pure domain policy is implemented under `apps/api/src/payments/domain`. Internal transition services use merchant-scoped conditional updates.
 
-## PaymentAttempt persistence lifecycle
+## PaymentAttempt and event lifecycle
 
-An internal `PaymentAttemptService` now provides the persistence boundary for a provider execution:
+An internal PaymentAttempt service:
+1. Verifies merchant ownership and the valid source state.
+2. Atomically transitions the intent to `PROCESSING`, creates a `CREATED` attempt, and writes a `payment_intent.processing` outbox event.
+3. Leaves provider network I/O to the caller after the transaction commits.
+4. Atomically records normalized provider results, terminal intent transitions, and outbox events.
+5. Keeps pending or unknown outcomes in processing for later reconciliation.
 
-1. `beginAttempt` verifies merchant ownership and requires the intent to be in `requires_confirmation`.
-2. In one short database transaction it changes the intent to `processing` and inserts a `CREATED` attempt.
-3. The caller must commit this transaction before making any provider network request.
-4. After the network call, `recordResult` stores a normalized provider result and atomically updates the intent to `succeeded` or `failed` when definitive.
-5. A `pending` result keeps the intent in `processing`; a timeout/unknown result can be recorded as a pending attempt for later reconciliation.
-6. A provider `requires_action` result is explicitly rejected for now because the current schema does not yet model a customer-action state or secure return flow.
+The outbox record and corresponding state change commit together. Event payloads contain normalized metadata only, not raw provider payloads or cardholder data. Event insertion is deduplicated by a merchant-scoped key.
 
-Provider I/O must never occur inside the Prisma transaction. Attempt result application is conditional and rejects duplicate terminal updates. The service is internal and is not exposed as a public status mutation API.
+## Provider boundary
 
-## Provider adapter contract
+The provider-neutral contract lives at `apps/api/src/payments/providers/payment-provider.contract.ts`. No concrete provider adapter or provider execution wiring is configured. Customer-action results are rejected until a secure customer-action state and return flow exist.
 
-`apps/api/src/payments/providers/payment-provider.contract.ts` defines a provider-neutral interface for creating and retrieving provider payments. A real adapter must execute server-to-server calls, use stable idempotency keys, return normalized results, preserve provider references, and verify webhook signatures. It must never accept or persist raw PAN, CVV, PIN, or magnetic-stripe track data.
+## Outbox delivery status
 
-No concrete provider adapter is currently implemented or configured. The new attempt service is a persistence boundary, not a claim that payment execution is operational.
+The durable outbox schema and transactional event writes are implemented. A dispatcher, lease recovery, delivery retries, dead-letter operations, and webhook endpoints are not implemented. Therefore events are persisted but not yet delivered.
+
+See [Transactional Outbox](transactional-outbox.md) for the delivery design.
 
 ## Reliability rules
 
-- Persist an attempt before making an external provider request.
-- Do not hold a database transaction open while waiting on a network call.
+- Never hold a database transaction open during provider I/O.
 - Treat network timeouts as unknown outcomes, not proof of failure.
-- Use a transactional outbox for committed domain events.
-- Assume webhook delivery is at-least-once; deduplicate by provider event ID.
+- Assume webhook delivery is at-least-once; consumers must deduplicate.
 - Use bounded retries with exponential backoff and jitter.
-- Reconcile ambiguous provider outcomes by retrieving provider state.
-- Never move an intent from a terminal state back into processing.
+- Reconcile ambiguous provider outcomes against provider truth.
+- Never move terminal intents back into processing.
 
-## What is not implemented
+## Current limitations
 
-Concrete provider adapters, provider execution wiring, customer action flows, retries, refunds, capture, webhook endpoints/delivery, outbox workers, reconciliation workers, and ledger accounting remain future work. PayFlow is not a licensed processor and this code is not a PCI compliance claim or production readiness claim.
+No concrete provider, payment execution, capture, refunds, customer-action flow, outbox dispatcher, webhook delivery, reconciliation worker, or ledger is implemented. PayFlow is not a licensed processor and this is not a PCI compliance or production readiness claim.

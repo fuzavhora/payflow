@@ -6,6 +6,7 @@ describe("PaymentAttemptService", () => {
   const tx = {
     paymentIntent: { findFirst: jest.fn(), updateMany: jest.fn() },
     paymentAttempt: { create: jest.fn(), findFirst: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn() },
+    outboxEvent: { upsert: jest.fn() },
   };
   const prisma = { $transaction: jest.fn() };
   let service: PaymentAttemptService;
@@ -13,10 +14,11 @@ describe("PaymentAttemptService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     prisma.$transaction.mockImplementation((callback: (client: typeof tx) => unknown) => callback(tx));
+    tx.outboxEvent.upsert.mockResolvedValue({});
     service = new PaymentAttemptService(prisma as never);
   });
 
-  it("moves a confirmation-ready intent to processing and creates the attempt atomically", async () => {
+  it("moves a confirmation-ready intent to processing and atomically creates attempt and outbox event", async () => {
     tx.paymentIntent.findFirst.mockResolvedValue({ id: "pi_1", status: PaymentIntentStatus.REQUIRES_CONFIRMATION });
     tx.paymentIntent.updateMany.mockResolvedValue({ count: 1 });
     tx.paymentAttempt.create.mockResolvedValue({ id: "pa_1", status: PaymentAttemptStatus.CREATED });
@@ -30,6 +32,9 @@ describe("PaymentAttemptService", () => {
     expect(tx.paymentAttempt.create).toHaveBeenCalledWith({
       data: { paymentIntentId: "pi_1", provider: "mock_provider", status: PaymentAttemptStatus.CREATED },
     });
+    expect(tx.outboxEvent.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({ eventType: "payment_intent.processing", aggregateId: "pi_1" }),
+    }));
     expect(result.id).toBe("pa_1");
   });
 
@@ -45,11 +50,9 @@ describe("PaymentAttemptService", () => {
     expect(tx.paymentIntent.updateMany).not.toHaveBeenCalled();
   });
 
-  it("records a provider success and transitions the intent in one transaction", async () => {
+  it("records provider success, transitions the intent and writes an outbox event atomically", async () => {
     tx.paymentAttempt.findFirst.mockResolvedValue({
-      id: "pa_1",
-      provider: "mock_provider",
-      status: PaymentAttemptStatus.CREATED,
+      id: "pa_1", provider: "mock_provider", status: PaymentAttemptStatus.CREATED,
       paymentIntent: { id: "pi_1", status: PaymentIntentStatus.PROCESSING },
     });
     tx.paymentAttempt.updateMany.mockResolvedValue({ count: 1 });
@@ -64,6 +67,9 @@ describe("PaymentAttemptService", () => {
       where: { id: "pi_1", merchantId: "merchant_1", status: PaymentIntentStatus.PROCESSING },
       data: { status: PaymentIntentStatus.SUCCEEDED },
     });
+    expect(tx.outboxEvent.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({ eventType: "payment_intent.succeeded", aggregateId: "pi_1" }),
+    }));
     expect(result?.status).toBe(PaymentAttemptStatus.SUCCEEDED);
   });
 
@@ -80,6 +86,9 @@ describe("PaymentAttemptService", () => {
     });
 
     expect(tx.paymentIntent.updateMany).not.toHaveBeenCalled();
+    expect(tx.outboxEvent.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({ eventType: "payment_attempt.pending" }),
+    }));
   });
 
   it("does not accept an unimplemented customer-action result", async () => {
@@ -101,5 +110,20 @@ describe("PaymentAttemptService", () => {
     await expect(service.recordResult("merchant_1", "pa_1", {
       provider: "mock_provider", providerReference: "mock_ref_1", status: "succeeded",
     })).rejects.toThrow(ConflictException);
+  });
+
+  it("records an unknown timeout outcome and an outbox event without failing the intent", async () => {
+    tx.paymentAttempt.findFirst.mockResolvedValue({
+      id: "pa_1", status: PaymentAttemptStatus.CREATED, paymentIntent: { id: "pi_1" },
+    });
+    tx.paymentAttempt.updateMany.mockResolvedValue({ count: 1 });
+    tx.paymentAttempt.findUnique.mockResolvedValue({ id: "pa_1", status: PaymentAttemptStatus.PENDING });
+
+    const result = await service.recordUnknownOutcome("merchant_1", "pa_1");
+
+    expect(tx.outboxEvent.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({ eventType: "payment_attempt.outcome_unknown" }),
+    }));
+    expect(result?.status).toBe(PaymentAttemptStatus.PENDING);
   });
 });

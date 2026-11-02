@@ -27,13 +27,15 @@ This roadmap reflects the current `feat/payflow-foundation` branch. A checked it
 - [x] Pure PaymentIntent transition policy and unit tests.
 - [x] Internal persisted transition service with merchant scoping and optimistic concurrency.
 - [x] PaymentAttempt persistence lifecycle with atomic intent/attempt updates.
+- [x] Transactional outbox write model for payment lifecycle events.
 - [x] Provider-neutral adapter contract.
+- [ ] Outbox dispatcher, retries, and webhook delivery.
 - [ ] Concrete provider adapter and provider execution wiring.
 - [ ] Customer-action flow and secure return handling.
 - [ ] Attempt retries, refunds, capture, and reconciliation.
 
 ## Webhooks and billing
-- [ ] Transactional outbox and signed webhook delivery.
+- [ ] Signed webhook delivery and consumer signature verification.
 - [ ] Retry and replay tooling.
 - [ ] Products, prices, subscriptions, and invoices.
 
@@ -43,6 +45,7 @@ This roadmap reflects the current `feat/payflow-foundation` branch. A checked it
 - [x] Security guide and payment-data boundaries.
 - [x] Troubleshooting guide.
 - [x] Payment lifecycle and provider integration guide.
+- [x] Transactional outbox design documentation.
 - [ ] SDKs and language-specific integration examples.
 - [ ] Local webhook inspector.
 - [ ] Self-hosting and upgrade documentation.
