@@ -84,9 +84,19 @@ export class WebhookDeliveryWorkerService {
 
     for (let offset = 0; offset < claimed.length; offset += concurrency) {
       const wave = claimed.slice(offset, offset + concurrency);
-      await Promise.all(wave.map((delivery) => this.processDelivery(
+      // Wait for every request in the wave even if a database acknowledgement fails.
+      // Failed acknowledgements retain their lease and are recovered after expiry.
+      const outcomes = await Promise.allSettled(wave.map((delivery) => this.processDelivery(
         delivery, timeoutMs, maxAttempts, baseRetryDelayMs, maxRetryDelayMs, summary,
       )));
+      outcomes.forEach((outcome, index) => {
+        if (outcome.status === "rejected") {
+          this.logger.error(
+            `Webhook delivery ${wave[index]?.id ?? "unknown"} could not be acknowledged; its lease will expire for recovery.`,
+            outcome.reason instanceof Error ? outcome.reason.stack : String(outcome.reason),
+          );
+        }
+      });
     }
 
     if (claimed.length > 0 || outbox.claimed > 0) {
