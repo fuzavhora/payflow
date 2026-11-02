@@ -10,8 +10,10 @@
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand",
+    "test:integration": "jest --runInBand --testRegex '.*\\.integration\\.test\\.ts$'",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init",
+    "prisma:test:reset": "prisma db push --accept-data-loss --skip-generate",
     "seed:merchant": "tsx scripts/create-test-merchant.ts"
   },
   "dependencies": {
