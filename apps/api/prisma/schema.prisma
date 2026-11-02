@@ -20,7 +20,12 @@ enum PaymentAttemptStatus {
   FAILED
   CANCELED
 }
-enum OutboxEventStatus {\n  PENDING\n  PROCESSING\n  PUBLISHED\n  DEAD_LETTER\n}\nenum ApiKeyEnvironment {
+enum OutboxEventStatus {
+  PENDING
+  PROCESSING
+  PUBLISHED
+  DEAD_LETTER
+}\nenum ApiKeyEnvironment {
   TEST
   LIVE
 }
@@ -34,6 +39,7 @@ model Merchant {
   paymentIntents PaymentIntent[]
   idempotencyKeys IdempotencyRecord[]
   apiKeys ApiKey[]
+  outboxEvents OutboxEvent[]
 }
 model ApiKey {
   id String @id @default(cuid())

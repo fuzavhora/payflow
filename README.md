@@ -1,72 +1,45 @@
 # PayFlow
 
-[![CI](https://github.com/fuzavhora/payflow/actions/workflows/ci.yml/badge.svg?branch=feat/payflow-foundation)](https://github.com/fuzavhora/payflow/actions/workflows/ci.yml)
-[![GitHub stars](https://img.shields.io/github/stars/fuzavhora/payflow?style=social)](https://github.com/fuzavhora/payflow/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/fuzavhora/payflow?style=social)](https://github.com/fuzavhora/payflow/network/members)
-[![GitHub issues](https://img.shields.io/github/issues/fuzavhora/payflow)](https://github.com/fuzavhora/payflow/issues)
+An open-source, developer-first payment platform for payments, billing, subscriptions, and payment orchestration.
 
-An open-source, developer-first payments and billing platform.
+> **Project status:** Early development. PayFlow is an application and orchestration layer, not a bank, acquirer, card network, or licensed payment processor. Current PaymentIntent endpoints create local records only; they do not execute payments or move money.
 
-> **Early development / demo stage.** Dashboard metrics are fictional. PaymentIntent endpoints currently create local database records only. No money is moved, no payment provider is contacted, and no card data is collected.
+## What exists today
 
-## Documentation
-
-- [Getting Started](docs/getting-started.md) — prerequisites, environment setup, database initialization, seed key, first run.
-- [API Reference](docs/api-reference.md) — routes, authentication, request examples, idempotency, and errors.
-- [Payment Lifecycle](docs/payment-lifecycle.md) — state transitions, provider adapter contract, and reliability requirements.
-- [Security Guide](docs/security.md) — API key handling, tenant isolation, payment-data boundaries, and limitations.
-- [Troubleshooting](docs/troubleshooting.md) — Docker, Prisma, auth, CORS, ports, and CI issues.
-- [Architecture](docs/architecture.md) — system boundaries and design decisions.
-- [Roadmap](docs/roadmap.md) — implementation status and planned work.
-- [Contributing](CONTRIBUTING.md) — contribution workflow.
-- [Security reporting](SECURITY.md) — how to report vulnerabilities.
-
-## Current implementation
-
-- Responsive Next.js dashboard with fictional sample metrics.
-- NestJS API and database-backed health endpoint.
-- Merchant-scoped API key authentication with test/live environment checks and route scopes.
-- Customer create/list/retrieve API.
-- PaymentIntent create/list/retrieve API with merchant-scoped idempotency.
-- Pure PaymentIntent state transition policy with unit tests.
-- Provider-neutral payment adapter contract (not yet wired to an implementation).
-- PostgreSQL schema for merchants, API keys, customers, payment intents, attempts, and idempotency.
-- Docker Compose for local PostgreSQL and Redis. Redis is provisioned but not yet connected to a worker.
-- GitHub Actions workflow for install, build, typecheck, and tests.
+- Next.js dashboard foundation with clearly fictional sample data.
+- NestJS API with merchant API-key authentication and scope enforcement.
+- Merchant-scoped customer APIs.
+- Local PaymentIntent create/list/retrieve APIs with idempotency.
+- PaymentIntent domain state machine and concurrency-safe internal transitions.
+- PaymentAttempt persistence lifecycle.
+- Transactional outbox writes for payment lifecycle events.
+- PostgreSQL, Redis, Docker Compose, and GitHub Actions CI foundation.
 
 ## Quick start
 
-See the full [Getting Started guide](docs/getting-started.md). In brief:
+See [Getting Started](docs/getting-started.md) for prerequisites, local database setup, Prisma migration, test merchant seeding, and application startup.
 
-```bash
-git clone https://github.com/fuzavhora/payflow.git
-cd payflow
-git switch feat/payflow-foundation
-cp env.example .env
-docker compose up -d
-pnpm install
-pnpm db:generate
-pnpm db:migrate
-PAYFLOW_SEED_MERCHANT_NAME="Local Demo" PAYFLOW_SEED_MERCHANT_SLUG="local-demo" pnpm db:seed:merchant
-pnpm dev
-```
+## Documentation
 
-Web dashboard: http://localhost:3000  
-API health: http://localhost:4000/api/v1/health
+- [Getting Started](docs/getting-started.md)
+- [API Reference](docs/api-reference.md)
+- [Architecture](docs/architecture.md)
+- [Payment Lifecycle](docs/payment-lifecycle.md)
+- [Transactional Outbox](docs/transactional-outbox.md)
+- [Security](docs/security.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Roadmap](docs/roadmap.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security Policy](SECURITY.md)
 
-## API at a glance
+## Important security boundary
 
-- `POST /api/v1/customers`
-- `GET /api/v1/customers`
-- `GET /api/v1/customers/{id}`
-- `POST /api/v1/payment-intents`
-- `GET /api/v1/payment-intents`
-- `GET /api/v1/payment-intents/{id}`
+Never send raw card numbers, CVV, PIN, or magnetic-stripe track data to PayFlow. Future integrations should use provider-hosted checkout or provider tokenization. Do not use live credentials or real payment traffic with the current foundation.
 
-All customer and payment routes require a scoped merchant API key. See the [API Reference](docs/api-reference.md) for complete examples.
+## Development branch
 
-## Product and compliance boundary
+Current implementation work is on `feat/payflow-foundation`. The `main` branch is not being updated as part of this work.
 
-PayFlow is an application and orchestration layer, not a bank, acquirer, card network, or licensed payment processor. External licensed providers must execute payment transactions. Never store raw PAN, CVV, PIN, or track data. No PCI DSS compliance claim is made. Do not use this development build with real cardholder data or real payment traffic.
+## License
 
-No license has been selected yet. Until a license file is added, all rights are reserved by default.
+No open-source license has been selected yet. Until a license is added, the repository is not granted an open-source reuse license.
