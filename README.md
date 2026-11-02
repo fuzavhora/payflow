@@ -13,6 +13,7 @@ An open-source, developer-first payments and billing platform.
 
 - [Getting Started](docs/getting-started.md) — prerequisites, environment setup, database initialization, seed key, first run.
 - [API Reference](docs/api-reference.md) — routes, authentication, request examples, idempotency, and errors.
+- [Payment Lifecycle](docs/payment-lifecycle.md) — state transitions, provider adapter contract, and reliability requirements.
 - [Security Guide](docs/security.md) — API key handling, tenant isolation, payment-data boundaries, and limitations.
 - [Troubleshooting](docs/troubleshooting.md) — Docker, Prisma, auth, CORS, ports, and CI issues.
 - [Architecture](docs/architecture.md) — system boundaries and design decisions.
@@ -26,8 +27,9 @@ An open-source, developer-first payments and billing platform.
 - NestJS API and database-backed health endpoint.
 - Merchant-scoped API key authentication with test/live environment checks and route scopes.
 - Customer create/list/retrieve API.
-- PaymentIntent create/list/retrieve API.
-- Merchant-scoped idempotency with canonical request fingerprint checks.
+- PaymentIntent create/list/retrieve API with merchant-scoped idempotency.
+- Pure PaymentIntent state transition policy with unit tests.
+- Provider-neutral payment adapter contract (not yet wired to an implementation).
 - PostgreSQL schema for merchants, API keys, customers, payment intents, attempts, and idempotency.
 - Docker Compose for local PostgreSQL and Redis. Redis is provisioned but not yet connected to a worker.
 - GitHub Actions workflow for install, build, typecheck, and tests.
