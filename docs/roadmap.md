@@ -9,7 +9,6 @@ This roadmap reflects the current `feat/payflow-foundation` branch. A checked it
 - [x] NestJS API bootstrap and database-backed health endpoint.
 - [x] PostgreSQL schema baseline and local infrastructure.
 - [ ] Commit a reproducible pnpm lockfile.
-- [ ] CI verification for the latest transition-service changes.
 
 ## Merchant and developer platform
 - [x] Merchant-scoped API key authentication foundation.
@@ -25,9 +24,11 @@ This roadmap reflects the current `feat/payflow-foundation` branch. A checked it
 - [x] Merchant-scoped idempotency and canonical request fingerprint checks.
 - [x] Pure PaymentIntent transition policy and unit tests.
 - [x] Internal persisted transition service with merchant scoping and optimistic concurrency.
+- [x] PaymentAttempt persistence lifecycle with atomic intent/attempt updates.
 - [x] Provider-neutral adapter contract.
-- [ ] Provider adapter and first provider sandbox integration.
-- [ ] Payment attempt orchestration, refunds, and reconciliation.
+- [ ] Concrete provider adapter and provider execution wiring.
+- [ ] Customer-action flow and secure return handling.
+- [ ] Attempt retries, refunds, capture, and reconciliation.
 
 ## Webhooks and billing
 - [ ] Transactional outbox and signed webhook delivery.
