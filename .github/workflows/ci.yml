@@ -18,9 +18,25 @@ concurrency:
 
 jobs:
   validate:
-    name: Install, typecheck, test and build
+    name: Install, typecheck, unit, integration and build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: payflow
+          POSTGRES_PASSWORD: payflow_local
+          POSTGRES_DB: payflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U payflow -d payflow_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://payflow:payflow_local@localhost:5432/payflow_test?schema=public
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,16 +56,18 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm db:generate
-        env:
-          DATABASE_URL: postgresql://payflow:payflow_local@localhost:5432/payflow?schema=public
 
       - name: Build applications
         run: pnpm build
-        env:
-          DATABASE_URL: postgresql://payflow:payflow_local@localhost:5432/payflow?schema=public
 
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Test
+      - name: Unit tests
         run: pnpm test
+
+      - name: Prepare isolated PostgreSQL test schema
+        run: pnpm --filter @payflow/api prisma:test:reset
+
+      - name: API integration tests
+        run: pnpm --filter @payflow/api test:integration
