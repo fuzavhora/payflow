@@ -45,10 +45,7 @@ class WebhookHttpStatusError extends Error {
   }
 }
 
-/**
- * Separate-process worker. Outbox fanout is acknowledged only after delivery rows
- * have been committed; outbound HTTP always happens outside database transactions.
- */
+/** Separate-process worker with durable fanout and at-least-once endpoint delivery. */
 @Injectable()
 export class WebhookDeliveryWorkerService {
   private readonly logger = new Logger(WebhookDeliveryWorkerService.name);
@@ -70,10 +67,8 @@ export class WebhookDeliveryWorkerService {
     const baseRetryDelayMs = this.integerOption(options.baseRetryDelayMs, 1000, 100, 3600000);
     const maxRetryDelayMs = this.integerOption(options.maxRetryDelayMs, 3600000, baseRetryDelayMs, 86400000);
 
-    // Fanout creates durable endpoint-specific delivery rows before the outbox
-    // event is acknowledged as published. createMany(skipDuplicates) makes this safe.
     const outbox = await this.outbox.dispatchOnce(
-      (message) => this.deliveries.fanout(message),
+      async (message) => { await this.deliveries.fanout(message); },
       { batchSize, leaseSeconds, maxAttempts, baseRetryDelayMs, maxRetryDelayMs },
     );
 
@@ -83,33 +78,32 @@ export class WebhookDeliveryWorkerService {
     for (const delivery of claimed) {
       try {
         const result = await this.send(delivery, timeoutMs);
-        await this.complete(delivery, {
-          statusCode: result.statusCode,
-          durationMs: result.durationMs,
-          success: true,
-        });
+        await this.complete(delivery, { success: true, statusCode: result.statusCode, durationMs: result.durationMs });
         summary.succeeded++;
       } catch (error) {
         const statusCode = error instanceof WebhookHttpStatusError || error instanceof PermanentWebhookDeliveryError
-          ? error.statusCode
-          : undefined;
+          ? error.statusCode : undefined;
         const permanent = error instanceof PermanentWebhookDeliveryError ||
           (statusCode !== undefined && statusCode >= 300 && statusCode < 500 && ![408, 409, 425, 429].includes(statusCode));
         const deadLetter = !permanent && delivery.attempts >= maxAttempts;
-        await this.complete(delivery, {
-          statusCode,
-          errorCode: error instanceof PermanentWebhookDeliveryError
-            ? error.errorCode
-            : statusCode !== undefined ? `HTTP_${statusCode}` : "DELIVERY_ERROR",
-          errorMessage: this.safeErrorMessage(error),
+        const outcome: {
+          success: false;
+          errorCode: string;
+          errorMessage: string;
+          terminalStatus?: WebhookDeliveryStatus;
+          retryAt?: Date;
+          statusCode?: number;
+        } = {
           success: false,
-          terminalStatus: permanent
-            ? WebhookDeliveryStatus.FAILED
-            : deadLetter ? WebhookDeliveryStatus.DEAD_LETTER : undefined,
-          retryAt: !permanent && !deadLetter
-            ? new Date(Date.now() + this.retryDelay(delivery.attempts, baseRetryDelayMs, maxRetryDelayMs))
-            : undefined,
-        });
+          errorCode: error instanceof PermanentWebhookDeliveryError
+            ? error.errorCode : statusCode !== undefined ? `HTTP_${statusCode}` : "DELIVERY_ERROR",
+          errorMessage: this.safeErrorMessage(error),
+        };
+        if (statusCode !== undefined) outcome.statusCode = statusCode;
+        if (permanent) outcome.terminalStatus = WebhookDeliveryStatus.FAILED;
+        else if (deadLetter) outcome.terminalStatus = WebhookDeliveryStatus.DEAD_LETTER;
+        else outcome.retryAt = new Date(Date.now() + this.retryDelay(delivery.attempts, baseRetryDelayMs, maxRetryDelayMs));
+        await this.complete(delivery, outcome);
         if (permanent) summary.failed++;
         else if (deadLetter) summary.deadLettered++;
         else summary.retried++;
@@ -127,20 +121,14 @@ export class WebhookDeliveryWorkerService {
     return this.prisma.$transaction(async (tx) => {
       const claimed = await tx.$queryRawUnsafe<ClaimedDelivery[]>(
         'WITH candidates AS ( SELECT "id" FROM "WebhookDelivery" WHERE ("status" = \'PENDING\'::"WebhookDeliveryStatus" AND "nextAttemptAt" <= NOW()) OR ("status" = \'PROCESSING\'::"WebhookDeliveryStatus" AND "lockedAt" < NOW() - ($1 * INTERVAL \'1 second\')) ORDER BY "nextAttemptAt" ASC, "createdAt" ASC FOR UPDATE SKIP LOCKED LIMIT $2 ) UPDATE "WebhookDelivery" AS delivery SET "status" = \'PROCESSING\'::"WebhookDeliveryStatus", "attempts" = delivery."attempts" + 1, "lockedAt" = NOW(), "lockToken" = $3 FROM candidates WHERE delivery."id" = candidates."id" RETURNING delivery."id", delivery."merchantId", delivery."endpointId", delivery."outboxEventId", delivery."attempts", delivery."lockToken"',
-        leaseSeconds,
-        batchSize,
-        lockToken,
+        leaseSeconds, batchSize, lockToken,
       );
-
       for (const delivery of claimed) {
-        // A prior worker may have crashed while holding the expired lease.
         await tx.webhookDeliveryAttempt.updateMany({
           where: { deliveryId: delivery.id, completedAt: null },
           data: { completedAt: new Date(), errorCode: "LEASE_EXPIRED", errorMessage: "Previous worker lease expired." },
         });
-        await tx.webhookDeliveryAttempt.create({
-          data: { deliveryId: delivery.id, attemptNumber: delivery.attempts },
-        });
+        await tx.webhookDeliveryAttempt.create({ data: { deliveryId: delivery.id, attemptNumber: delivery.attempts } });
       }
       return claimed;
     });
@@ -190,17 +178,6 @@ export class WebhookDeliveryWorkerService {
     },
   ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      await tx.webhookDeliveryAttempt.updateMany({
-        where: { deliveryId: delivery.id, attemptNumber: delivery.attempts, completedAt: null },
-        data: {
-          completedAt: new Date(),
-          statusCode: outcome.statusCode ?? null,
-          durationMs: outcome.durationMs ?? null,
-          errorCode: outcome.errorCode ?? null,
-          errorMessage: outcome.errorMessage ?? null,
-        },
-      });
-
       const data = outcome.success
         ? {
             status: WebhookDeliveryStatus.SUCCEEDED,
@@ -226,9 +203,23 @@ export class WebhookDeliveryWorkerService {
               lastStatusCode: outcome.statusCode ?? null,
               lastError: outcome.errorMessage ?? "Webhook delivery failed.",
             };
-      await tx.webhookDelivery.updateMany({
+
+      // Fence the delivery first. A stale worker must not mutate even its attempt row.
+      const updated = await tx.webhookDelivery.updateMany({
         where: { id: delivery.id, status: WebhookDeliveryStatus.PROCESSING, lockToken: delivery.lockToken },
         data,
+      });
+      if (updated.count !== 1) return;
+
+      await tx.webhookDeliveryAttempt.updateMany({
+        where: { deliveryId: delivery.id, attemptNumber: delivery.attempts, completedAt: null },
+        data: {
+          completedAt: new Date(),
+          statusCode: outcome.statusCode ?? null,
+          durationMs: outcome.durationMs ?? null,
+          errorCode: outcome.errorCode ?? null,
+          errorMessage: outcome.errorMessage ?? null,
+        },
       });
     });
   }
@@ -236,12 +227,9 @@ export class WebhookDeliveryWorkerService {
   private sortJson(value: unknown): unknown {
     if (Array.isArray(value)) return value.map((entry) => this.sortJson(entry));
     if (value !== null && typeof value === "object") {
-      return Object.fromEntries(
-        Object.keys(value as Record<string, unknown>).sort().map((key) => [
-          key,
-          this.sortJson((value as Record<string, unknown>)[key]),
-        ]),
-      );
+      return Object.fromEntries(Object.keys(value as Record<string, unknown>).sort().map((key) => [
+        key, this.sortJson((value as Record<string, unknown>)[key]),
+      ]));
     }
     return value;
   }
