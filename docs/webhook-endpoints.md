@@ -9,7 +9,7 @@ All routes require a merchant API key. Required scopes:
 - `POST /api/v1/webhook-endpoints` — register URL and event types.
 - `GET /api/v1/webhook-endpoints` — list current merchant endpoints.
 - `PATCH /api/v1/webhook-endpoints/:id` — update URL, enabled state, or event subscriptions.
-- `DELETE /api/v1/webhook-endpoints/:id` — disable endpoint (soft disable).
+- `DELETE /api/v1/webhook-endpoints/:id` — disable endpoint (soft disable).\n- `GET /api/v1/webhook-deliveries` — list merchant delivery records.\n- `GET /api/v1/webhook-deliveries/:id` — retrieve one delivery and its attempt history.
 
 Every database operation is scoped by authenticated merchant ID. The API never accepts merchant ID from the request body. Plaintext signing secret is returned only once at creation; list/update responses never expose encrypted or plaintext secret material.
 

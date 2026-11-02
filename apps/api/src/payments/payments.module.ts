@@ -9,10 +9,11 @@ import { WebhookEndpointsController } from "./webhook-endpoints.controller";
 import { WebhookEndpointsService } from "./webhook-endpoints.service";
 import { WebhookSignatureService } from "./webhook-signature.service";
 import { WebhookDeliveryService } from "./webhook-delivery.service";
+import { WebhookDeliveriesController } from "./webhook-deliveries.controller";
 
 @Module({
   imports: [AuthModule],
-  controllers: [PaymentIntentsController, WebhookEndpointsController],
+  controllers: [PaymentIntentsController, WebhookEndpointsController, WebhookDeliveriesController],
   providers: [PaymentIntentsService, PaymentIntentTransitionService, PaymentAttemptService, OutboxDispatcherService, WebhookEndpointsService, WebhookSignatureService, WebhookDeliveryService],
   exports: [PaymentIntentTransitionService, PaymentAttemptService, OutboxDispatcherService, WebhookEndpointsService, WebhookSignatureService],
 })
