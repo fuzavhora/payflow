@@ -50,7 +50,7 @@ pnpm --filter @payflow/api build
 pnpm --filter @payflow/api worker:webhooks
 ```
 
-`WEBHOOK_WORKER_POLL_INTERVAL_MS` defaults to 1000 ms (250–60000). Worker defaults: batch 25, 60-second lease, 8 attempts per retry cycle, 8-second HTTPS timeout, exponential backoff with jitter. Run one or more replicas; PostgreSQL row locks and lock tokens coordinate claims.
+`WEBHOOK_WORKER_POLL_INTERVAL_MS` defaults to 1000 ms (250–60000). Worker defaults: batch 25, concurrency 10, 60-second lease, 8 attempts per retry cycle, 8-second HTTPS timeout, exponential backoff with jitter. Claimed deliveries are processed in bounded concurrent waves so a large batch does not expire its leases while waiting in a sequential queue. The worker rejects configurations whose lease is shorter than the number of processing waves multiplied by the request timeout, plus a 15-second margin. Increase the lease when increasing timeout or reducing concurrency. Run one or more replicas; PostgreSQL row locks and lock tokens coordinate claims.
 
 ## Delivery states
 

@@ -102,3 +102,30 @@ describe("WebhookDeliveryWorkerService", () => {
     }));
   });
 });
+
+  it("processes claimed deliveries concurrently without exceeding configured concurrency", async () => {
+    outbox.dispatchOnce.mockResolvedValue({ claimed: 0, published: 0, retried: 0, deadLettered: 0 });
+    const claimed = Array.from({ length: 21 }, (_, index) => ({
+      id: `del_${index}`, merchantId: "m_1", endpointId: "ep_1", outboxEventId: `evt_${index}`,
+      attempts: index + 1, attemptsInCycle: 1, lockToken: `lease_${index}`,
+    }));
+    (worker as any).claimDeliveries = jest.fn().mockResolvedValue(claimed);
+    let active = 0;
+    let maximumActive = 0;
+    (worker as any).processDelivery = jest.fn(async () => {
+      active++;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active--;
+    });
+    await worker.runOnce({ batchSize: 21, concurrency: 7, leaseSeconds: 60, timeoutMs: 8000 });
+    expect((worker as any).processDelivery).toHaveBeenCalledTimes(21);
+    expect(maximumActive).toBe(7);
+  });
+
+  it("rejects a lease budget that cannot cover configured processing waves", async () => {
+    await expect(worker.runOnce({
+      batchSize: 25, concurrency: 5, timeoutMs: 30000, leaseSeconds: 60,
+    })).rejects.toThrow("Lease must be at least");
+    expect(outbox.dispatchOnce).not.toHaveBeenCalled();
+  });
