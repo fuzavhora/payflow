@@ -29,7 +29,7 @@ A random 256-bit signing secret is encrypted at rest using AES-256-GCM. Configur
 
 ## URL safety and transport
 
-Only HTTPS URLs with public-looking hostnames are accepted at registration. At delivery time the worker resolves all A/AAAA records, rejects any non-public answer, pins the selected validated address, verifies TLS, does not follow redirects, bounds request time and caps response-body consumption. Add deployment-level egress controls and review address policy against current IANA special-purpose registries before production.
+Only HTTPS URLs with public-looking hostnames are accepted at registration. At delivery time the worker resolves all A/AAAA records with a 3-second resolution wait limit, rejects any non-public answer, pins the selected validated address, verifies TLS, does not follow redirects, bounds request time and caps response-body consumption. The underlying operating-system DNS lookup may continue in the background after the wait limit; no HTTPS request is made when the bounded wait expires. Add deployment-level egress controls and review address policy against current IANA special-purpose registries before production.
 
 ## Event format and signatures
 
