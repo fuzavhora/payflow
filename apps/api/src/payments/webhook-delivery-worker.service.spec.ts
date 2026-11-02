@@ -101,7 +101,6 @@ describe("WebhookDeliveryWorkerService", () => {
       data: expect.objectContaining({ statusCode: 503, errorCode: "HTTP_503" }),
     }));
   });
-});
 
   it("processes claimed deliveries concurrently without exceeding configured concurrency", async () => {
     outbox.dispatchOnce.mockResolvedValue({ claimed: 0, published: 0, retried: 0, deadLettered: 0 });
@@ -129,3 +128,5 @@ describe("WebhookDeliveryWorkerService", () => {
     })).rejects.toThrow("Lease must be at least");
     expect(outbox.dispatchOnce).not.toHaveBeenCalled();
   });
+
+});
