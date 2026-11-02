@@ -15,8 +15,11 @@ export class WebhookSignatureService {
     if (!match) return false;
     const timestamp = Number(match[1]);
     if (!Number.isSafeInteger(timestamp) || Math.abs(nowSeconds - timestamp) > toleranceSeconds) return false;
-    const expected = Buffer.from(this.sign(rawBody, secret, timestamp).split("v1=")[1], "hex");
-    const supplied = Buffer.from(match[2], "hex");
+    const suppliedHex = match[2];
+    if (!suppliedHex) return false;
+    const expectedHex = createHmac("sha256", secret).update(String(timestamp)).update(".").update(rawBody).digest("hex");
+    const expected = Buffer.from(expectedHex, "hex");
+    const supplied = Buffer.from(suppliedHex, "hex");
     return expected.length === supplied.length && timingSafeEqual(expected, supplied);
   }
 }
