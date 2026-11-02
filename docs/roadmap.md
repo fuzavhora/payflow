@@ -8,9 +8,8 @@ This roadmap reflects the current `feat/payflow-foundation` branch. A checked it
 - [x] Responsive dashboard with fictional sample data.
 - [x] NestJS API bootstrap and database-backed health endpoint.
 - [x] PostgreSQL schema baseline and local infrastructure.
-- [x] GitHub Actions validation workflow committed.
+- [x] GitHub Actions build, typecheck, and test workflow passes on the current documentation/code-fix commit.
 - [ ] Commit a reproducible pnpm lockfile.
-- [ ] Verify a complete green CI run after the latest compiler fixes.
 
 ## Merchant and developer platform
 - [x] Merchant-scoped API key authentication foundation.
@@ -24,9 +23,11 @@ This roadmap reflects the current `feat/payflow-foundation` branch. A checked it
 ## Payments core
 - [x] Create, list, and retrieve PaymentIntents as local records.
 - [x] Merchant-scoped idempotency and canonical request fingerprint checks.
-- [ ] Explicit, tested payment state transition service.
-- [ ] Provider adapter interface and first provider sandbox integration.
-- [ ] Refund lifecycle and reconciliation.
+- [x] Pure PaymentIntent transition policy and unit tests.
+- [x] Provider-neutral adapter contract.
+- [ ] Persisted payment transition service with optimistic concurrency.
+- [ ] Provider adapter and first provider sandbox integration.
+- [ ] Payment attempt orchestration, refunds, and reconciliation.
 
 ## Webhooks and billing
 - [ ] Transactional outbox and signed webhook delivery.
@@ -38,6 +39,7 @@ This roadmap reflects the current `feat/payflow-foundation` branch. A checked it
 - [x] Current API reference with examples and error semantics.
 - [x] Security guide and payment-data boundaries.
 - [x] Troubleshooting guide.
+- [x] Payment lifecycle and provider integration guide.
 - [ ] SDKs and language-specific integration examples.
 - [ ] Local webhook inspector.
 - [ ] Self-hosting and upgrade documentation.
