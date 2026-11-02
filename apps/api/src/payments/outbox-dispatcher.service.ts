@@ -11,6 +11,9 @@ export interface OutboxMessage {
   aggregateId: string;
   payload: Prisma.JsonValue;
   attempts: number;
+}
+
+interface ClaimedOutboxMessage extends OutboxMessage {
   lockToken: string;
 }
 export interface OutboxDispatchOptions {
@@ -35,7 +38,7 @@ export class OutboxDispatcherService {
 
     const lockToken = randomUUID();
     const claimed = await this.prisma.$transaction(async (tx) =>
-      tx.$queryRawUnsafe<OutboxMessage[]>(
+      tx.$queryRawUnsafe<ClaimedOutboxMessage[]>(
         'WITH candidates AS ( SELECT "id" FROM "OutboxEvent" WHERE ("status" = \'PENDING\'::"OutboxEventStatus" AND "availableAt" <= NOW()) OR ("status" = \'PROCESSING\'::"OutboxEventStatus" AND "lockedAt" < NOW() - ($1 * INTERVAL \'1 second\')) ORDER BY "availableAt" ASC, "createdAt" ASC FOR UPDATE SKIP LOCKED LIMIT $2 ) UPDATE "OutboxEvent" AS event SET "status" = \'PROCESSING\'::"OutboxEventStatus", "attempts" = event."attempts" + 1, "lockedAt" = NOW(), "lockToken" = $3 FROM candidates WHERE event."id" = candidates."id" RETURNING event."id", event."merchantId", event."eventType", event."aggregateType", event."aggregateId", event."payload", event."attempts", event."lockToken"',
         leaseSeconds, batchSize, lockToken,
       ),
@@ -56,7 +59,7 @@ export class OutboxDispatcherService {
         const deadLetter = message.attempts >= maxAttempts;
         const delay = this.retryDelay(message.attempts, baseRetryDelayMs, maxRetryDelayMs);
         const update = await this.prisma.outboxEvent.updateMany({
-          where: { id: message.id, status: OutboxEventStatus.PROCESSING },
+          where: { id: message.id, status: OutboxEventStatus.PROCESSING, lockToken: message.lockToken },
           data: deadLetter
             ? { status: OutboxEventStatus.DEAD_LETTER, lockedAt: null, lockToken: null, lastError: this.safeErrorMessage(error) }
             : { status: OutboxEventStatus.PENDING, availableAt: new Date(Date.now() + delay), lockedAt: null, lockToken: null, lastError: this.safeErrorMessage(error) },
