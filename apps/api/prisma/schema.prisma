@@ -61,6 +61,7 @@ model Customer {
   merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   payments PaymentIntent[]
   @@unique([merchantId, email])
+  @@unique([merchantId, id])
   @@index([merchantId, createdAt])
 }
 model PaymentIntent {
@@ -75,10 +76,10 @@ model PaymentIntent {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Restrict)
-  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customer Customer? @relation(fields: [merchantId, customerId], references: [merchantId, id], onDelete: Restrict)
   attempts PaymentAttempt[]
   @@index([merchantId, status, createdAt])
-  @@index([customerId, createdAt])
+  @@index([merchantId, customerId, createdAt])
 }
 model PaymentAttempt {
   id String @id @default(cuid())

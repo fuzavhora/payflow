@@ -9,12 +9,14 @@ This roadmap reflects the current `feat/payflow-foundation` branch. A checked it
 - [x] NestJS API bootstrap and database-backed health endpoint.
 - [x] PostgreSQL schema baseline and local infrastructure.
 - [ ] Commit a reproducible pnpm lockfile.
+- [ ] Commit a reviewed baseline Prisma migration.
 
 ## Merchant and developer platform
 - [x] Merchant-scoped API key authentication foundation.
 - [x] Test/live key environment validation and route scope enforcement.
 - [x] Local test merchant and API key generator.
 - [x] Merchant-scoped customer create/list/retrieve API.
+- [x] Database-enforced tenant integrity for PaymentIntent-Customer relation.
 - [ ] Merchant dashboard authentication and role-based access.
 - [ ] API key management UI, rotation, and revocation endpoints.
 - [ ] Audit events and rate limiting.

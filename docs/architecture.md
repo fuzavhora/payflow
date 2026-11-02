@@ -16,9 +16,7 @@ PayFlow is a self-hostable payment application and orchestration layer. It coord
 
 Payment API routes require a merchant API key in the Bearer authorization header. Keys use high-entropy random material; only SHA-256 hashes are stored. An indexed public prefix locates the hash record, and the supplied key is compared using a constant-time digest comparison. Merchant identity is resolved server-side from the verified key. The key's encoded test/live environment must match its database record. Routes declare required scopes and the guard enforces them. API keys can be expired or revoked in storage; management endpoints are not yet implemented.
 
-## Customer domain
-
-Customers are unique by normalized email within a merchant. All customer reads and writes receive the merchant ID from authenticated request context; clients cannot supply or override tenant ownership. PaymentIntent creation validates that an attached customer belongs to the same merchant.
+Customers are unique by normalized email within a merchant. PaymentIntent creation validates customer ownership in application logic. The Prisma schema now also models the PaymentIntent-to-Customer relation as a composite foreign key over `(merchantId, customerId)` -> `(merchantId, id)`, so PostgreSQL rejects cross-merchant customer references even if an application path forgets the tenant check. Customer deletion is restricted while referenced by a PaymentIntent; this avoids a composite `SET NULL` action accidentally nulling the non-null merchant ID. Customer archival/deletion policy needs a deliberate soft-delete design.
 
 ## Payment domain
 
@@ -40,7 +38,7 @@ Treat callbacks and webhooks as at-least-once. Use bounded exponential retries w
 
 ## Security gaps
 
-API key authentication and scope enforcement are implemented. Rate limiting, audit events, key management UI, tenant-isolation integration tests, webhook verification, and production secrets management remain to be implemented. Do not expose live keys or use real payment traffic yet.
+API key authentication and scope enforcement are implemented. Rate limiting, audit events, key management UI, webhook verification, and production secrets management remain to be implemented. Database tenant integrity is enforced for the PaymentIntent-Customer relation by a composite foreign key. Do not expose live keys or use real payment traffic yet.
 
 ## Known gaps
 
