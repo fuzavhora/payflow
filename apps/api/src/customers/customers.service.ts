@@ -18,8 +18,10 @@ export class CustomersService {
     try {
       const customer = await this.prisma.customer.create({
         data: {
-          merchantId, email: dto.email.trim().toLowerCase(), name: dto.name?.trim(),
-          metadata: dto.metadata as Prisma.InputJsonValue | undefined,
+          merchantId,
+          email: dto.email.trim().toLowerCase(),
+          ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+          ...(dto.metadata !== undefined ? { metadata: dto.metadata as Prisma.InputJsonValue } : {}),
         },
       });
       return { data: this.serialize(customer) };

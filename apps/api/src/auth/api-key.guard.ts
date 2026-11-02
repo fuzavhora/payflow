@@ -16,7 +16,8 @@ export class ApiKeyGuard implements CanActivate {
     }
     const rawKey = authorization.slice(7).trim();
     const parts = rawKey.split("_");
-    if (parts.length !== 4 || parts[0] !== "pf" || !["test", "live"].includes(parts[1])) {
+    const environmentPart = parts[1];
+    if (parts.length !== 4 || parts[0] !== "pf" || (environmentPart !== "test" && environmentPart !== "live")) {
       throw new UnauthorizedException("The API key is invalid or revoked.");
     }
     const keyPrefix = parts.slice(0, 3).join("_");
@@ -27,7 +28,7 @@ export class ApiKeyGuard implements CanActivate {
     if (!record || record.revokedAt || (record.expiresAt && record.expiresAt <= new Date())) {
       throw new UnauthorizedException("The API key is invalid or revoked.");
     }
-    const expectedEnvironment = parts[1] === "test" ? ApiKeyEnvironment.TEST : ApiKeyEnvironment.LIVE;
+    const expectedEnvironment = environmentPart === "test" ? ApiKeyEnvironment.TEST : ApiKeyEnvironment.LIVE;
     if (record.environment !== expectedEnvironment) throw new UnauthorizedException("The API key environment is invalid.");
 
     const suppliedHash = createHash("sha256").update(rawKey).digest();

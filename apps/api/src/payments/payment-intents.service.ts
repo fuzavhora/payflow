@@ -44,8 +44,12 @@ export class PaymentIntentsService {
         await tx.idempotencyRecord.create({ data: { merchantId, key: idempotencyKey, requestHash } });
         const created = await tx.paymentIntent.create({
           data: {
-            merchantId, customerId: dto.customerId, amount: BigInt(dto.amount), currency: dto.currency,
-            description: dto.description, metadata: dto.metadata as Prisma.InputJsonValue | undefined,
+            merchantId,
+            amount: BigInt(dto.amount),
+            currency: dto.currency,
+            ...(dto.customerId !== undefined ? { customerId: dto.customerId } : {}),
+            ...(dto.description !== undefined ? { description: dto.description } : {}),
+            ...(dto.metadata !== undefined ? { metadata: dto.metadata as Prisma.InputJsonValue } : {}),
           },
         });
         await tx.idempotencyRecord.update({

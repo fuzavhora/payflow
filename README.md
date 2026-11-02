@@ -7,9 +7,21 @@
 
 An open-source, developer-first payments and billing platform.
 
-> Early development / demo stage. Dashboard metrics are fictional. API payment intents are local records only. No money is moved and no card data is collected.
+> **Early development / demo stage.** Dashboard metrics are fictional. PaymentIntent endpoints currently create local database records only. No money is moved, no payment provider is contacted, and no card data is collected.
+
+## Documentation
+
+- [Getting Started](docs/getting-started.md) — prerequisites, environment setup, database initialization, seed key, first run.
+- [API Reference](docs/api-reference.md) — routes, authentication, request examples, idempotency, and errors.
+- [Security Guide](docs/security.md) — API key handling, tenant isolation, payment-data boundaries, and limitations.
+- [Troubleshooting](docs/troubleshooting.md) — Docker, Prisma, auth, CORS, ports, and CI issues.
+- [Architecture](docs/architecture.md) — system boundaries and design decisions.
+- [Roadmap](docs/roadmap.md) — implementation status and planned work.
+- [Contributing](CONTRIBUTING.md) — contribution workflow.
+- [Security reporting](SECURITY.md) — how to report vulnerabilities.
 
 ## Current implementation
+
 - Responsive Next.js dashboard with fictional sample metrics.
 - NestJS API and database-backed health endpoint.
 - Merchant-scoped API key authentication with test/live environment checks and route scopes.
@@ -20,39 +32,39 @@ An open-source, developer-first payments and billing platform.
 - Docker Compose for local PostgreSQL and Redis. Redis is provisioned but not yet connected to a worker.
 - GitHub Actions workflow for install, build, typecheck, and tests.
 
-## Local development
-Requirements: Node.js 20+, pnpm 9+, Docker.
+## Quick start
 
-1. Copy env.example to .env.
-2. Start infrastructure: docker compose up -d.
-3. Install packages: pnpm install.
-4. Generate Prisma client: pnpm db:generate.
-5. Apply local migrations: pnpm db:migrate.
-6. Create a local test merchant and API key:
-   PAYFLOW_SEED_MERCHANT_NAME="Local Demo" PAYFLOW_SEED_MERCHANT_SLUG="local-demo" pnpm db:seed:merchant
-7. Start apps: pnpm dev.
+See the full [Getting Started guide](docs/getting-started.md). In brief:
 
-The seed command prints a test key once. Store it securely. It refuses production mode and refuses to recreate an existing slug.
+```bash
+git clone https://github.com/fuzavhora/payflow.git
+cd payflow
+git switch feat/payflow-foundation
+cp env.example .env
+docker compose up -d
+pnpm install
+pnpm db:generate
+pnpm db:migrate
+PAYFLOW_SEED_MERCHANT_NAME="Local Demo" PAYFLOW_SEED_MERCHANT_SLUG="local-demo" pnpm db:seed:merchant
+pnpm dev
+```
 
-Web: http://localhost:3000  
+Web dashboard: http://localhost:3000  
 API health: http://localhost:4000/api/v1/health
 
-## API examples
+## API at a glance
 
-Create a customer:
-curl -X POST http://localhost:4000/api/v1/customers -H "Authorization: Bearer YOUR_TEST_KEY" -H "Content-Type: application/json" -d '{"email":"customer@example.com","name":"Demo Customer"}'
+- `POST /api/v1/customers`
+- `GET /api/v1/customers`
+- `GET /api/v1/customers/{id}`
+- `POST /api/v1/payment-intents`
+- `GET /api/v1/payment-intents`
+- `GET /api/v1/payment-intents/{id}`
 
-Create a PaymentIntent (amount uses integer minor units; 1000 means 10.00 for a two-decimal currency):
-curl -X POST http://localhost:4000/api/v1/payment-intents -H "Authorization: Bearer YOUR_TEST_KEY" -H "Idempotency-Key: order-12345" -H "Content-Type: application/json" -d '{"amount":1000,"currency":"USD","description":"Demo order"}'
+All customer and payment routes require a scoped merchant API key. See the [API Reference](docs/api-reference.md) for complete examples.
 
-List customers: GET /api/v1/customers?page=1&limit=20  
-Retrieve customer: GET /api/v1/customers/{id}  
-List PaymentIntents: GET /api/v1/payment-intents?page=1&limit=20  
-Retrieve PaymentIntent: GET /api/v1/payment-intents/{id}
+## Product and compliance boundary
 
-Every resource query is scoped to the merchant resolved from the API key. Customer and payment operations require explicit API key scopes.
-
-## Product boundary
-PayFlow is an application and orchestration layer, not a bank, acquirer, card network, or licensed payment processor. Never store raw PAN, CVV, PIN, or track data. Do not claim PCI DSS compliance without formal assessment.
+PayFlow is an application and orchestration layer, not a bank, acquirer, card network, or licensed payment processor. External licensed providers must execute payment transactions. Never store raw PAN, CVV, PIN, or track data. No PCI DSS compliance claim is made. Do not use this development build with real cardholder data or real payment traffic.
 
 No license has been selected yet. Until a license file is added, all rights are reserved by default.
