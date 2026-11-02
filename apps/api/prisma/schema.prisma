@@ -20,6 +20,10 @@ enum PaymentAttemptStatus {
   FAILED
   CANCELED
 }
+enum ApiKeyEnvironment {
+  TEST
+  LIVE
+}
 model Merchant {
   id String @id @default(cuid())
   name String
@@ -29,6 +33,22 @@ model Merchant {
   customers Customer[]
   paymentIntents PaymentIntent[]
   idempotencyKeys IdempotencyRecord[]
+  apiKeys ApiKey[]
+}
+model ApiKey {
+  id String @id @default(cuid())
+  merchantId String
+  name String
+  keyPrefix String @unique
+  keyHash String @unique
+  environment ApiKeyEnvironment @default(TEST)
+  scopes String[] @default([])
+  lastUsedAt DateTime?
+  expiresAt DateTime?
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  @@index([merchantId, environment, revokedAt])
 }
 model Customer {
   id String @id @default(cuid())
