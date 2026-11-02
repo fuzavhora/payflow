@@ -25,7 +25,8 @@ enum OutboxEventStatus {
   PROCESSING
   PUBLISHED
   DEAD_LETTER
-}\nenum ApiKeyEnvironment {
+}
+enum ApiKeyEnvironment {
   TEST
   LIVE
 }
