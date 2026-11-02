@@ -10,15 +10,19 @@
 - [ ] CI workflow and license selection.
 
 ## Merchant and developer platform
-- [ ] Merchant model, tenant isolation, authentication, and roles.
-- [ ] Test/live environment separation.
-- [ ] API key creation, hashing, rotation, and revocation.
-- [ ] Audit records for privileged operations.
+- [x] Merchant-scoped API key authentication foundation.
+- [x] Test/live key environment validation and route scope enforcement.
+- [x] Local test merchant and API key generator.
+- [x] Merchant-scoped customer create/list/retrieve API.
+- [ ] Merchant dashboard authentication and role-based access.
+- [ ] API key management UI, rotation, and revocation endpoints.
+- [ ] Audit events and rate limiting.
 
 ## Payments core
-- [ ] PaymentIntent and PaymentAttempt state machine.
-- [ ] Merchant-scoped idempotency.
-- [ ] First provider adapter in sandbox mode.
+- [x] Create, list, and retrieve PaymentIntents in local test mode.
+- [x] Merchant-scoped idempotency and request fingerprint checks.
+- [ ] Explicit, tested payment state transition service.
+- [ ] Provider adapter interface and first provider sandbox integration.
 - [ ] Refund lifecycle and reconciliation.
 
 ## Webhooks and billing

@@ -8,13 +8,12 @@ async function main() {
   if (!name || !slug) throw new Error("Set PAYFLOW_SEED_MERCHANT_NAME and PAYFLOW_SEED_MERCHANT_SLUG.");
   if (await prisma.merchant.findUnique({ where: { slug } })) throw new Error("Merchant slug already exists. Refusing to rotate credentials.");
   const keyPrefix = `pf_test_${randomBytes(5).toString("hex")}`;
-  // Hex avoids delimiter ambiguity when the guard parses the public key prefix.
   const apiKey = `${keyPrefix}_${randomBytes(32).toString("hex")}`;
   const keyHash = createHash("sha256").update(apiKey).digest("hex");
   await prisma.merchant.create({
     data: { name, slug, apiKeys: { create: {
       name: "Local development key", keyPrefix, keyHash, environment: ApiKeyEnvironment.TEST,
-      scopes: ["payment_intents:read", "payment_intents:write"],
+      scopes: ["payment_intents:read", "payment_intents:write", "customers:read", "customers:write"],
     } } },
   });
   console.log("Merchant created:", slug);
